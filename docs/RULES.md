@@ -39,7 +39,8 @@ no neck, so all four directions are legal.
    loser's neck.
 10. **Body collisions**, against occupancy frozen after steps 5–9. A snake may legally follow
     a **vacating tail**, but not the tail of a snake that ate this turn. A snake killed in
-    step 4, 8 or 9 still occupies the board for this test.
+    step 4, 8 or 9 still occupies the board for this test — with exactly one exception, the
+    head cell of a head-on **loser**, which the winner legitimately holds (§Divergences 6).
 11. **Remove the dead.**
 12. **Food respawn** from a separate seeded stream (`seed xor 0x5EED`), so a change to seat
     behaviour can never shift the food draw.
@@ -77,3 +78,17 @@ seat moved somewhere else. It is computed by the same `headOnOutcome` / `willOcc
 4. Naming your own neck is a death upstream; here it is **repaired** and counted. A model's
    formatting slip must not be an instant loss.
 5. Battlesnake hazards are not implemented in v1.
+
+### From this game's own design note
+
+6. **Step 10 and the head-on winner.** The note's step 10 says a snake killed in step 4, 8 or
+   9 "still occupies the board for this test" without qualification, while its step 9 says
+   head-ons resolve *before* body collisions precisely so that the winner is not "immediately
+   killed by the loser's neck". The two sentences disagree about exactly one cell: after step
+   5 a head-on loser's head IS the winner's head cell, so leaving it blocked would kill the
+   winner on its victim's corpse and `longer_wins` would decide nothing. The resolver
+   (`src/snake/rules.nim`, step 10) therefore frees that ONE cell and blocks everything else a
+   corpse holds — the loser's neck and the rest of its body, and the whole body **including
+   the head** of a snake killed by a wall or by hunger. `tests/test_snake_sim.nim` blocks 8
+   and 9 pin both halves: the head-on winner lives and holds the contested cell, and a
+   starved snake's corpse still kills a rival that walks into it on the same turn.

@@ -2,7 +2,7 @@
 ## note, and the five documented divergences are present with their citations.
 ## A constant edited without editing the citation fails here.
 
-import std/strutils
+import std/[json, os, strutils]
 import snake/[rules, upstream, sim_types]
 import helpers
 
@@ -64,5 +64,28 @@ c.check("Divergences from the upstreams" in rulesDoc,
 for needle in ["shrinks every 40", "health is 100", "starts at length 1",
                "repaired", "hazards are not implemented"]:
   c.check(needle in rulesDoc, "docs/RULES.md mentions: " & needle)
+
+# ...and the one place the resolver departs from the design note's literal
+# wording, which is a divergence like any other and is recorded as one.
+for needle in ["head-on **loser**", "Step 10 and the head-on winner",
+               "frees that ONE cell"]:
+  c.check(needle in rulesDoc,
+    "docs/RULES.md records the step-10 exception: " & needle)
+
+# The manifest inlines these pages, so an edit to the doc that never reaches
+# game.docs would ship a manifest describing different rules.
+block:
+  let manifest = parseJson(readFile("coworld_manifest_template.json"))
+  var seen = 0
+  for page in manifest{"game"}{"docs"}{"pages"}:
+    let id = page{"id"}.getStr()
+    let path = "docs/" & id.toUpperAscii().replace(".MD", ".md")
+    if fileExists(path):
+      inc seen
+      c.check(page{"content"}{"value"}.getStr() == readFile(path),
+        "the manifest's inlined " & id & " is byte-identical to " & path)
+  c.check(seen == 3, "all three doc pages are inlined from the repo")
+  c.check(manifest{"game"}{"docs"}{"readme"}{"value"}.getStr() ==
+    readFile("README.md"), "and the readme is the repo's README.md")
 
 c.report()
