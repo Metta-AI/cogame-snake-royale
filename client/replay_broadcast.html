@@ -1646,6 +1646,26 @@ body[data-embed] #board { top: 0; height: 100%; }
 .plate.dead { opacity: 0.5; }
 .plate.trapped .cog-chip { box-shadow: 0 0 0 calc(2 * var(--u)) var(--red); }
 
+/* Four seats, not two teams: each side carries TWO plates side by side, so the
+   scorebug band stays one row tall and relayout()'s measured --topband does not
+   swallow the top of the board. */
+#scorebug .plates {
+  flex-direction: row;
+  align-items: center;
+  gap: calc(14 * var(--u));
+  flex: 1 1 0;
+  overflow: hidden;
+}
+#scorebug .plates .plate { flex: 1 1 0; min-width: 0; }
+#clock .alive-badge {
+  font-family: var(--pixfont);
+  font-size: calc(17 * var(--u));
+  line-height: 1.05;
+  color: var(--paper);
+}
+#clock .time { font-size: calc(13 * var(--u)); opacity: 0.85; }
+#stage.tiny #scorebug .plates { gap: calc(7 * var(--u)); }
+
 /* ---- duel banner: TOP band only, never the transport band ---- */
 #bannerlane .banner-chip.duel { border-bottom-color: var(--amber); }
 
@@ -1677,6 +1697,7 @@ body[data-embed] #board { top: 0; height: 100%; }
 #endcard .ec-thead { color: var(--paper-dim); text-transform: uppercase; letter-spacing: 0.12em; }
 #endcard .ec-row .cog { color: var(--tc, var(--paper)); text-align: left; }
 #endcard .ec-table { width: calc(430 * var(--u)); max-width: 100%; display: flex; flex-direction: column; gap: calc(3 * var(--u)); }
+#endcard .how { max-width: calc(430 * var(--u)); white-space: nowrap; }
 
 /* ---- 360 px: the featured-match iframe is the real target ---- */
 @media (max-width: 640px) {
