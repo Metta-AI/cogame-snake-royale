@@ -391,6 +391,10 @@ proc runEpisode*(host: string, port: int, config: GameConfig,
       let records = engine.turn(episode, elapsed)
       for record in records:
         replay.chats.add(record)
+      ## A fallback is a fact about the transport, not about the board, so the
+      ## sim cannot derive it: the decision layer emits the events and they
+      ## join the episode's stream here.
+      allEvents.add(engine.events)
 
       var
         dirs: array[Seats, Dir]

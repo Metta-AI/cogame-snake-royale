@@ -45,6 +45,12 @@ type
     batchStarted*: bool
     llmOff*: bool               ## the budget guard fired; scripted from here
     records*: seq[string]
+    events*: seq[TurnEvent]
+      ## The `fallback` events this turn produced. The sim cannot derive them
+      ## -- a fallback is a fact about the TRANSPORT, not about the board --
+      ## so the decision layer emits them and the server folds them into the
+      ## episode's event stream, which is what puts `fallback` in the tier-2
+      ## analysis stream and the "MISSED THE CALL" row in the match feed.
 
 proc initDecisionEngine*(config: GameConfig): DecisionEngine =
   result.client = newLlmClient(config)
@@ -191,6 +197,13 @@ proc turn*(engine: var DecisionEngine, episode: var Episode,
     budget = initDuration(milliseconds = max(1, episode.config.turnBudgetMs))
   ## Throttle state is PER TURN: a 429 on turn k says nothing about turn k+1.
   engine.client.throttled = false
+  engine.events.setLen(0)
+
+  template noteFallback(seat: int, why: string) =
+    ## A template, not a closure: `engine` is a var parameter and cannot be
+    ## captured.
+    engine.events.add(TurnEvent(kind: ekFallback, turn: turnIndex, slot: seat,
+      other: -1, at: episode.state.snakes[seat].head(), text: why))
 
   # --- budget guard: settle EARLY rather than overrun -----------------------
   if not engine.llmOff:
@@ -222,6 +235,7 @@ proc turn*(engine: var DecisionEngine, episode: var Episode,
       let cause = if engine.llmOff: "budget_guard" else: "no_credentials"
       result.add(fallbackRecord(turnIndex, slot, 1, cause,
         "the LLM is unavailable for this turn; playing coil"))
+      noteFallback(slot, cause)
       echo "snake-royale llm: seat ", slot, " falling back to coil (", cause,
         ") on turn ", turnIndex
     else:
@@ -261,6 +275,7 @@ proc turn*(engine: var DecisionEngine, episode: var Episode,
       for slot in open:
         result.add(fallbackRecord(turnIndex, slot, attempt + 1, "timeout",
           "per-turn budget exhausted before attempt " & $(attempt + 1)))
+        noteFallback(slot, "timeout")
       break
     let deadlineMs =
       if attempt == 0: episode.config.attempt1Ms else: episode.config.retryMs
@@ -335,6 +350,7 @@ proc turn*(engine: var DecisionEngine, episode: var Episode,
       else: "parse_error"
     result.add(fallbackRecord(turnIndex, slot, 2, cause,
       "seat fell back to the coil direction"))
+    noteFallback(slot, cause)
     ## "falling back" is the phrase phase 60 greps the GAME log for.
     echo "snake-royale llm: seat ", slot, " falling back to coil (", cause,
       ") on turn ", turnIndex

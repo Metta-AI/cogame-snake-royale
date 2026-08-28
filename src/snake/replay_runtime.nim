@@ -60,6 +60,13 @@ type
     aliveSeries*: seq[int]
     says*: Table[int, string]   ## (turn * Seats + slot) -> text
     fallbackTurns*: seq[int]
+    fallbacks*: Table[int, string]
+      ## (turn * Seats + slot) -> cause. A fallback is a fact about the
+      ## TRANSPORT, so it cannot be re-derived from the board: it is recorded
+      ## once and re-applied here, into non-hashed fields only, exactly like a
+      ## `say`. The pre-scan turns each one back into a `fallback` TurnEvent,
+      ## which is what draws the scrubber's fallback beat and the feed's
+      ## MISSED THE CALL row.
     duelTurn*: int
     mismatchTurn*: int
     resultsJson*: string
@@ -119,7 +126,14 @@ proc ingestChats(rt: var ReplayRuntime) =
       if slot >= 0 and slot < Seats and say.len > 0:
         rt.says[turn * Seats + slot] = say
     of "fallback":
-      rt.fallbackTurns.add(node{"turn"}.getInt(0))
+      let
+        turn = node{"turn"}.getInt(0)
+        slot = node{"slot"}.getInt(-1)
+      rt.fallbackTurns.add(turn)
+      if slot >= 0 and slot < Seats:
+        ## Attempt 1 and attempt 2 both write a record; one seat missing one
+        ## turn's call is ONE event, and the last cause is the one that stuck.
+        rt.fallbacks[turn * Seats + slot] = node{"cause"}.getStr("")
     of "register":
       let slot = node{"slot"}.getInt(-1)
       if slot >= 0 and slot < Seats:
@@ -167,6 +181,10 @@ proc preScan*(rt: var ReplayRuntime) =
         turnEvents.add(TurnEvent(kind: ekSay, turn: index + 1, slot: slot,
           other: -1, at: rt.episode.state.snakes[slot].head(),
           text: rt.says[key]))
+      if rt.fallbacks.hasKey(key):
+        turnEvents.add(TurnEvent(kind: ekFallback, turn: index + 1, slot: slot,
+          other: -1, at: rt.episode.state.snakes[slot].head(),
+          text: rt.fallbacks[key]))
     rt.events.add(turnEvents)
     if rt.mismatchTurn < 0 and rt.episode.state.gameHash != recorded.hash:
       rt.mismatchTurn = index + 1
@@ -200,9 +218,6 @@ proc preScan*(rt: var ReplayRuntime) =
       firstEat[e.slot] = true
     rt.beats.add(Beat(turn: e.turn, kind: $e.kind, slot: e.slot,
       label: beatLabel($e.kind, e.slot, e.value)))
-  for turn in rt.fallbackTurns:
-    rt.beats.add(Beat(turn: turn, kind: "fallback", slot: -1,
-      label: beatLabel("fallback", 0, 0)))
   rt.beats.add(Beat(turn: rt.replay.turns.len, kind: "gameover", slot: -1,
     label: beatLabel("gameover", 0, 0)))
 
@@ -241,6 +256,7 @@ proc loadReplay*(bytes: string): ReplayRuntime =
       else: Colours[slot]
   result.stopTurn = -1
   result.says = initTable[int, string]()
+  result.fallbacks = initTable[int, string]()
   result.ingestChats()
   result.playback = Playback(playing: true, speed: 1, loop: false,
     skipLulls: false, frame: 0,

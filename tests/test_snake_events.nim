@@ -3,7 +3,8 @@
 ## in the set.
 
 import std/[sets, strutils]
-import snake/[rules, events, sim, sim_types, baselines, engine]
+import snake/[rules, events, sim, sim_types, baselines, engine, labels,
+              records, replays, replay_runtime]
 import helpers
 
 var c = newChecker("test_snake_events")
@@ -57,5 +58,43 @@ block:
                "gameover"]:
     c.check(("beat-marker." & kind) in blockText,
       "the block styles the emitted kind " & kind)
+
+# `fallback` is EMITTED, not merely declared: a recorded fallback comes back
+# as a real event on playback, and drives the beat and the feed row.
+block:
+  var config = defaultGameConfig()
+  config.seed = 42
+  config.maxTurns = 40
+  var played = runScriptedEpisode(config, certificationSeats())
+  var replay = played.replay
+  ## Two records for one seat-turn -- attempt 1 and the retry -- which is what
+  ## the decision layer really writes; they are ONE missed call.
+  replay.chats.add(fallbackRecord(3, 1, 1, "timeout", "attempt 1 timed out"))
+  replay.chats.add(fallbackRecord(3, 1, 2, "timeout", "fell back to coil"))
+  var rt = loadReplay(encodeReplay(replay))
+  var emitted: seq[TurnEvent]
+  for e in rt.events:
+    if e.kind == ekFallback:
+      emitted.add(e)
+  c.check(emitted.len == 1,
+    "one fallback record pair is one fallback event (got " &
+    $emitted.len & ")")
+  if emitted.len == 1:
+    c.check(emitted[0].turn == 3 and emitted[0].slot == 1,
+      "and it names the turn and the seat")
+    c.check(emitted[0].text == "timeout", "and carries the cause")
+    c.check(feedRow(rt.episode, emitted[0]) ==
+      cogAlias(1) & " MISSED THE CALL — coil move (timeout)",
+      "and the feed row the design note prints is reachable at last")
+  var beats = 0
+  for b in rt.beats:
+    if b.kind == "fallback":
+      inc beats
+      c.check(b.turn == 3, "the fallback beat is on the right turn")
+      c.check(b.slot == 1, "and names the seat that missed the call")
+  c.check(beats == 1, "exactly one fallback beat (got " & $beats & ")")
+  c.check("\"k\":\"fallback\"" in eventsJsonl(rt.events, rt.replay.turns.len,
+    GameVersion),
+    "and the tier-2 analysis stream carries a fallback row")
 
 c.report()

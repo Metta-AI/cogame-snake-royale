@@ -118,4 +118,31 @@ block:
   c.check("will retry" in source,
     "and attempt 1 says `will retry`, never `falling back`")
 
+# A fallback is EMITTED as an event on the live path too, not only recorded.
+block:
+  ## With no credentials every LLM seat falls back every turn. The record is
+  ## what phase 60 counts; the EVENT is what reaches the tier-2 stream and the
+  ## match feed, and there was no code path constructing one.
+  var config = defaultGameConfig()
+  config.turnSpacingMs = 0
+  var episode = newEpisode(config)
+  var engine = initDecisionEngine(config)
+  engine.seats[0].isLlm = true
+  engine.seats[0].prompt = "take the most open lane"
+  let records = engine.turn(episode, 0)
+  var recorded = 0
+  for record in records:
+    if "\"k\":\"fallback\"" in record: inc recorded
+  c.check(recorded >= 1, "the fallback is recorded for the replay")
+  var events = 0
+  for e in engine.events:
+    if e.kind == ekFallback and e.slot == 0:
+      inc events
+      c.check(e.text == "no_credentials", "and the event carries the cause")
+      c.check(e.turn == episode.state.turn + 1, "and the turn")
+  c.check(events == 1,
+    "and exactly one fallback EVENT is emitted (got " & $events & ")")
+  c.check(engine.haveOrder[0] and episode.seats[0].fallbackTurns == 1,
+    "and the seat still has a legal order")
+
 c.report()
