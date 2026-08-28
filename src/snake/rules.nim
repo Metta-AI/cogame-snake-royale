@@ -480,8 +480,21 @@ proc resolveTurn*(state: var GameState, dirs: array[Seats, Dir],
         inc ties
     let winner =
       if state.rules.headToHead == hhLongerWins and ties == 1: best else: -1
+    ## `headon` carries the whole group: `slot` is its lowest member, `other`
+    ## the WINNER or -1 when everybody in the cell dies, `value` the group
+    ## size, `extra` the winner's post-step-8 length (0 without a winner), and
+    ## `text` every member as `slot:length`, ascending. The match feed's
+    ## "COG-alpha (8) beats COG-gamma (6)" needs the lengths and the names; the
+    ## WORDING lives in `labels.nim`, and this is the data it words.
+    var members = ""
+    for member in group:
+      if members.len > 0:
+        members.add(",")
+      members.add($member & ":" & $state.snakes[member].length())
     events.add(TurnEvent(kind: ekHeadOn, turn: state.turn, slot: group[0],
-      other: winner, at: targets[slot], value: group.len))
+      other: winner, at: targets[slot], value: group.len,
+      extra: (if winner >= 0: state.snakes[winner].length() else: 0),
+      text: members))
     for member in group:
       if member == winner:
         continue
@@ -549,11 +562,18 @@ proc resolveTurn*(state: var GameState, dirs: array[Seats, Dir],
     state.snakes[slot].deathCause = cause[slot]
     state.snakes[slot].killedBy = killer[slot]
     state.snakes[slot].survivedTurns = state.turn - 1
+    ## `at` is the cell that killed it -- for a wall death the OFF-BOARD
+    ## target, which is what tells the feed which wall it ran into. Taken
+    ## before the body is cleared.
+    let deathAt =
+      if cause[slot] == dcWall: targets[slot]
+      else: state.snakes[slot].head()
     state.snakes[slot].body.setLen(0)
     state.snakes[slot].freeSpace = 0
     state.snakes[slot].trapped = false
     events.add(TurnEvent(kind: ekDeath, turn: state.turn, slot: slot,
-      other: killer[slot], value: finalLength, text: $cause[slot]))
+      other: killer[slot], at: deathAt, value: finalLength,
+      text: $cause[slot]))
 
   # 12. Food respawn.
   state.spawnFood(events)
@@ -613,7 +633,9 @@ proc auditDeclinedKills*(state: var GameState, before: GameState,
       let moved = before.rules.board.step(before.snakes[slot].head(), d)
       if moved.offBoard or willOccupy(before, slot, moved.cell):
         continue
-      var contenders = 0
+      var
+        contenders = 0
+        spared = -1
       for other in 0 ..< Seats:
         if other == slot or not before.snakes[other].alive:
           continue
@@ -621,6 +643,7 @@ proc auditDeclinedKills*(state: var GameState, before: GameState,
           let om = before.rules.board.step(before.snakes[other].head(), od)
           if not om.offBoard and om.cell == moved.cell:
             inc contenders
+            spared = other
             break
       if contenders != 1:
         continue
@@ -630,6 +653,8 @@ proc auditDeclinedKills*(state: var GameState, before: GameState,
           myLength:
         continue
       inc state.snakes[slot].declinedKills
+      ## `other` is the rival that was spared -- the audit already knows it is
+      ## exactly one, and the feed row names it.
       result.add(TurnEvent(kind: ekDecline, turn: state.turn, slot: slot,
-        other: -1, at: moved.cell))
+        other: spared, at: moved.cell))
       break

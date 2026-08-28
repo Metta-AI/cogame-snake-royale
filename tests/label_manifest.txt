@@ -1,13 +1,22 @@
 eats — length
-runs into a wall
+runs into the north wall
+runs into the south wall
+runs into the west wall
+runs into the east wall
 runs into a body
+loses a head-on
 starves
+is out
 HEAD-ON — 
  wins the cell
+ beats 
+ both die (
+ all die
 everybody in that cell dies
 is TRAPPED — 
 HUNGER — everyone loses a segment
 declines a free head-on
+declines a free head-on with 
 MISSED THE CALL — coil move
 DUEL — two snakes left
 Last snake standing
