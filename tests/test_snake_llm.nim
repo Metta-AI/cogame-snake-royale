@@ -66,6 +66,33 @@ block:
     "the worst case fits the 720 s play budget")
   c.check(config.wallClockBudgetSeconds <= 720,
     "and the engine's own stop is inside it")
+  ## The per-turn budget is a cap on the CALLS -- attempt 1 plus the single
+  ## retry plus slack -- so it must be able to hold both attempts.
+  c.check(config.turnBudgetMs >= config.attempt1Ms + config.retryMs,
+    "the turn budget covers attempt 1 AND the retry")
+
+# The turn budget covers the calls, not the rate floor in front of them.
+block:
+  ## The retry is unconditional (design note D3), so the clock the deadline
+  ## check reads must START AT THE FIRST REQUEST, below the `turnSpacingMs`
+  ## sleep. Started above it, the sleep -- 9 s minus the previous turn's
+  ## latency -- ate the budget, leaving exactly attempt 1's own 6 s in steady
+  ## state and pre-empting the retry batch.
+  let source = readFile("src/snake/decide.nim")
+  let floorAt = source.find("if since < episode.config.turnSpacingMs:")
+  let clockAt = source.find("let turnStart = getMonoTime()")
+  let deadlineAt = source.find("if getMonoTime() - turnStart >= budget:")
+  c.check(floorAt > 0 and clockAt > 0 and deadlineAt > 0,
+    "the rate floor, the turn clock and the deadline check are all present")
+  c.check(clockAt > floorAt,
+    "the turn budget clock starts BELOW the rate floor's sleep")
+  c.check(deadlineAt > clockAt, "and the deadline check reads it")
+  ## And a config that could not hold both attempts is repaired.
+  var narrow = defaultGameConfig()
+  narrow.update("""{"turnBudgetMs": 6000}""")
+  c.check(narrow.turnBudgetMs == narrow.attempt1Ms + narrow.retryMs,
+    "a turn budget too small for attempt 1 + retry is repaired (got " &
+    $narrow.turnBudgetMs & ")")
 
 # sim_config REJECTS a sub-second deadline.
 block:

@@ -189,7 +189,6 @@ proc turn*(engine: var DecisionEngine, episode: var Episode,
   let
     turnIndex = episode.state.turn + 1
     budget = initDuration(milliseconds = max(1, episode.config.turnBudgetMs))
-    turnStart = getMonoTime()
   ## Throttle state is PER TURN: a 429 on turn k says nothing about turn k+1.
   engine.client.throttled = false
 
@@ -243,6 +242,16 @@ proc turn*(engine: var DecisionEngine, episode: var Episode,
     engine.lastBatchStart = getMonoTime()
     engine.batchStarted = true
 
+  # The per-turn budget covers the CALLS, not the wait in front of them.
+  # `turnBudgetMs` is sized for attempt 1 + the retry + slack (6 + 3 + 2 s,
+  # design note §Cadence), and `sim_config` now refuses a value that does not
+  # cover both attempts. Starting the clock ABOVE the rate floor spent
+  # `turnSpacingMs - L(k-1)` of it before the first request went out, so in
+  # steady state -- batch starts held 9 s apart, a batch measuring ~4 s -- only
+  # 6 s of the 11 s was left, exactly attempt 1's own deadline, and a seat that
+  # failed attempt 1 was pre-empted at the deadline check below instead of
+  # entering the retry batch the design's D3 makes unconditional.
+  let turnStart = getMonoTime()
   # --- up to two PARALLEL batches ------------------------------------------
   var attempt = 0
   while open.len > 0 and attempt < 2:

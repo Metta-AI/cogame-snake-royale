@@ -111,7 +111,11 @@ proc update*(config: var GameConfig, raw: string) =
       $config.retryMs & "): curly hands the deadline to CURLOPT_TIMEOUT, " &
       "whose granularity is whole seconds, so anything else is not the " &
       "deadline it claims to be. 0.1.2 shipped 4500 and really ran with 4 s.")
-  if config.turnBudgetMs < config.attempt1Ms:
+  if config.turnBudgetMs < config.attempt1Ms + config.retryMs:
+    ## The per-turn budget is a cap on the CALLS: attempt 1, the single retry
+    ## and slack. A budget that cannot hold both attempts would pre-empt the
+    ## retry the design's D3 makes unconditional, so it is repaired rather
+    ## than silently under-running.
     config.turnBudgetMs = config.attempt1Ms + config.retryMs
 
   config.playerNames = @[]
