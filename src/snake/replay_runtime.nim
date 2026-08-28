@@ -46,6 +46,7 @@ type
     fastForward*: bool
     frame*: int                 ## absolute render frame
     framesPerTurn*: int
+    accum*: int                 ## sub-frame remainder, for duel slow-mo
 
   ReplayRuntime* = object
     replay*: Replay
@@ -277,7 +278,17 @@ proc advance*(rt: var ReplayRuntime) =
   if rt.playback.skipLulls and rt.inLull(rt.turnAt(rt.playback.frame)):
     step = step * 4
     rt.playback.fastForward = true
-  rt.playback.frame = rt.playback.frame + step
+  ## DUEL SLOW-MO. From the pre-scan's duel turn a turn takes
+  ## `framesPerTurnAt` render frames instead of `framesPerTurn` -- half speed,
+  ## which is exactly what the `DUEL -- half speed` banner announces. The frame
+  ## AXIS stays uniform, so the scrubber, `s:<tick>` and every beat button stay
+  ## 1:1 with the turn; only the rate the playhead walks it changes. Outside
+  ## the duel `perTurn == framesPerTurn` and this is `frame += step` exactly.
+  let perTurn = max(1, rt.framesPerTurnAt(rt.turnAt(rt.playback.frame)))
+  rt.playback.accum = rt.playback.accum + step * rt.playback.framesPerTurn
+  let advanced = rt.playback.accum div perTurn
+  rt.playback.accum = rt.playback.accum mod perTurn
+  rt.playback.frame = rt.playback.frame + advanced
   if rt.playback.frame >= last:
     if rt.playback.loop:
       rt.playback.frame = 0
@@ -291,6 +302,7 @@ proc seekTurn*(rt: var ReplayRuntime, turn: int) =
   ## `s:<tick>`. Parsing it as a fraction instead would clamp every non-zero
   ## click to 1.0 and land the viewer on the last frame -- which also RAISES
   ## the endcard rather than dismissing it, because `over` is `turn >= turns`.
+  rt.playback.accum = 0
   let last = rt.totalFrames() - 1
   var t = turn
   if t < 0: t = 0

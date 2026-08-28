@@ -73,6 +73,42 @@ block:
   c.check("send('s:' + (st + Math.round(frac * (mx - st))))" in page,
     "33b: and the page still sends the tick the runtime now parses")
 
+# 33c -- the duel banner's claim is true: the playhead really does halve.
+block:
+  ## `client/replay_broadcast.html` announces `DUEL — half speed` from the
+  ## pre-scan's duel turn. `framesPerTurnAt` doubles the frames per turn there
+  ## and had no caller, so the banner was the only thing that changed.
+  let played = runScriptedEpisode(config("royale", 42, 40), certificationSeats())
+  var rt = loadReplay(encodeReplay(played.replay))
+  let turns = rt.snapshots.len - 1
+  c.check(turns >= 12, "33c: the fixture is long enough")
+  rt.duelTurn = 6
+  c.check(not rt.duelActive(5), "33c: before the duel turn, normal speed")
+  c.check(rt.duelActive(6) and rt.duelActive(7), "33c: from it, slow-mo")
+  c.check(rt.framesPerTurnAt(5) == rt.playback.framesPerTurn,
+    "33c: a normal turn takes renderFramesPerTurn frames")
+  c.check(rt.framesPerTurnAt(6) == rt.playback.framesPerTurn * 2,
+    "33c: a duel turn takes twice as many")
+
+  rt.seekTurn(2)
+  rt.playback.playing = true
+  let beforeFrame = rt.playback.frame
+  for _ in 1 .. 8:
+    rt.advance()
+  let normal = rt.playback.frame - beforeFrame
+  c.check(normal == 8, "33c: eight frames of normal playback advance eight")
+
+  rt.seekTurn(8)                       ## inside the duel
+  let duelFrom = rt.playback.frame
+  for _ in 1 .. 8:
+    rt.advance()
+  let slow = rt.playback.frame - duelFrom
+  c.check(slow == 4,
+    "33c: eight frames inside the duel advance FOUR -- half speed (got " &
+    $slow & ")")
+  c.check(rt.turnAt(rt.playback.frame) >= 8,
+    "33c: and the playhead is still on the turn axis the scrubber draws")
+
 # 34 -- the replay is self-sufficient.
 block:
   let played = runScriptedEpisode(config("geese", 7, 40), certificationSeats())
