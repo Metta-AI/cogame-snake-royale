@@ -53,6 +53,15 @@ const
   CoilTunables* = Tunables(spaceWeight: 100, spaceCap: 2,
     headRiskPenalty: 900, killBonus: 120, foodWeight: 100,
     hungerThreshold: 12)
+  ## `forager`'s five character knobs -- always hungry, tight on space, cheap
+  ## on risk -- are the design note's table and are deliberately NOT optimised:
+  ## it is the player a champion should be able to beat, so tuning it for the
+  ## margin would measure the wrong thing. Its `spaceWeight` IS swept, on both
+  ## the note's 400 and this 40, because that one knob decides how greedy it
+  ## really is and a guess has no place in a table of swept numbers. 40 is the
+  ## measured pick: it keeps forager visibly greedier (it accepts tighter room
+  ## and traps itself more) and it is the better ladder for coil to be
+  ## measured against (+0.1805 against 40, +0.1667 against 400).
   ForagerTunables* = Tunables(spaceWeight: 40, spaceCap: 1,
     headRiskPenalty: 500, killBonus: 60, foodWeight: 40,
     hungerThreshold: 999)

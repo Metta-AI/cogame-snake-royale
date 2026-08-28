@@ -220,6 +220,40 @@ block:
     c.check(node{"hungerThreshold"}.getInt == want.hungerThreshold,
       name & " hungerThreshold")
 
+  ## Both baselines' swept knobs are really in the harness's matrix -- a
+  ## shipped number the sweep never varied is a guess sitting in a table of
+  ## swept numbers.
+  let harness = readFile("tools/tune_baselines.nim")
+  c.check("for foragerSpaceWeight in [40, 400]:" in harness,
+    "the sweep varies forager's spaceWeight, not just coil's")
+  c.check("forager.spaceWeight = foragerSpaceWeight" in harness,
+    "and really plays the ladder with it")
+  let swept = tuning{"sweep"}
+  c.check(not swept.isNil, "the swept matrix is recorded")
+  if not swept.isNil:
+    var coilSpaceWeights: seq[int]
+    for v in swept{"coilSpaceWeight"}: coilSpaceWeights.add(v.getInt())
+    var foragerSpaceWeights: seq[int]
+    for v in swept{"foragerSpaceWeight"}: foragerSpaceWeights.add(v.getInt())
+    var coilFoodWeights: seq[int]
+    for v in swept{"coilFoodWeight"}: coilFoodWeights.add(v.getInt())
+    var coilSpaceCaps: seq[int]
+    for v in swept{"coilSpaceCap"}: coilSpaceCaps.add(v.getInt())
+    c.check(CoilTunables.spaceWeight in coilSpaceWeights,
+      "coil's shipped spaceWeight is a row of the matrix")
+    c.check(CoilTunables.spaceCap in coilSpaceCaps,
+      "and its spaceCap")
+    c.check(CoilTunables.foodWeight in coilFoodWeights,
+      "and its foodWeight")
+    c.check(ForagerTunables.spaceWeight in foragerSpaceWeights,
+      "and forager's spaceWeight is a row of the matrix too")
+    c.check(swept{"best"}{"foragerSpaceWeight"}.getInt() ==
+      ForagerTunables.spaceWeight and
+      swept{"best"}{"coilSpaceWeight"}.getInt() == CoilTunables.spaceWeight and
+      swept{"best"}{"coilSpaceCap"}.getInt() == CoilTunables.spaceCap and
+      swept{"best"}{"coilFoodWeight"}.getInt() == CoilTunables.foodWeight,
+      "and the shipped pick IS the best row the sweep recorded")
+
   ## The ladder is the regression pin. Four seeds on each of the three rule
   ## modules, each played TWICE with the two baselines swapped between the
   ## seat pairs -- 24 episodes -- measured through the SAME `ladderTotals`

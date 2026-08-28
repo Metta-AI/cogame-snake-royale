@@ -27,19 +27,30 @@ proc sweep() =
   ## own length and cannot usefully exceed the BFS cap of four; `spaceWeight`
   ## sets how many free cells one head-on risk is worth; `foodWeight` is what
   ## pulls a hungry snake off its space-maximising path.
-  echo "coil sweep over the ladder (margin = coil mean score - forager mean)"
-  for spaceWeight in [100, 300, 1000]:
-    for spaceCap in [2, 4]:
-      for foodWeight in [8, 100, 400]:
-        var coil = CoilTunables
-        coil.spaceWeight = spaceWeight
-        coil.spaceCap = spaceCap
-        coil.foodWeight = foodWeight
-        let totals = ladderTotals(coil, ForagerTunables)
-        echo "  spaceWeight=", spaceWeight, " spaceCap=", spaceCap,
-          " foodWeight=", foodWeight, " margin=", ladderMargin(totals),
-          " coilTurns=", totals.coilTurns,
-          " foragerTurns=", totals.foragerTurns
+  ##
+  ## FORAGER IS SWEPT TOO, on the one knob that decides how greedy it really
+  ## is: holding it fixed made its shipped `spaceWeight` a guess sitting in a
+  ## table of swept numbers. Its other five knobs are its CHARACTER -- always
+  ## hungry, tight on space, cheap on risk -- and are the design note's, not
+  ## something to optimise: forager is the player a champion should be able to
+  ## beat, so tuning it for the margin would be measuring the wrong thing.
+  echo "sweep over the ladder (margin = coil mean score - forager mean)"
+  for foragerSpaceWeight in [40, 400]:
+    var forager = ForagerTunables
+    forager.spaceWeight = foragerSpaceWeight
+    for spaceWeight in [100, 300, 1000]:
+      for spaceCap in [2, 4]:
+        for foodWeight in [8, 100, 400]:
+          var coil = CoilTunables
+          coil.spaceWeight = spaceWeight
+          coil.spaceCap = spaceCap
+          coil.foodWeight = foodWeight
+          let totals = ladderTotals(coil, forager)
+          echo "  foragerSpaceWeight=", foragerSpaceWeight,
+            " coilSpaceWeight=", spaceWeight, " coilSpaceCap=", spaceCap,
+            " coilFoodWeight=", foodWeight, " margin=", ladderMargin(totals),
+            " coilTurns=", totals.coilTurns,
+            " foragerTurns=", totals.foragerTurns
 
 proc measuredJson(totals: LadderTotals): JsonNode =
   var perModule = newJObject()

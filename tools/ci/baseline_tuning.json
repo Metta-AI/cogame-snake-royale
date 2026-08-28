@@ -25,6 +25,35 @@
     "episodes": 24,
     "why": "Each seed is played once per seating, so every baseline occupies each spawn anchor the same number of times. The four anchors are not equally good: on an unmirrored ladder two IDENTICAL players score 0.222 apart, and any margin read off it is mostly seat position."
   },
+  "sweep": {
+    "coilSpaceWeight": [
+      100,
+      300,
+      1000
+    ],
+    "coilSpaceCap": [
+      2,
+      4
+    ],
+    "coilFoodWeight": [
+      8,
+      100,
+      400
+    ],
+    "foragerSpaceWeight": [
+      40,
+      400
+    ],
+    "rows": 36,
+    "best": {
+      "foragerSpaceWeight": 40,
+      "coilSpaceWeight": 100,
+      "coilSpaceCap": 2,
+      "coilFoodWeight": 100,
+      "margin": 0.1805
+    },
+    "why": "forager's other five knobs are its CHARACTER (always hungry, tight on space, cheap on risk) and are the design note's: it is the player a champion should be able to beat, so tuning it for the margin would measure the wrong thing. Its spaceWeight is swept because that one knob decides how greedy it really is. Every row is printed by `tune_baselines.nim --sweep`, which ci.yml runs on every push."
+  },
   "baselines": {
     "coil": {
       "spaceWeight": 100,
