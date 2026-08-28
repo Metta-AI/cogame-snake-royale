@@ -232,12 +232,36 @@ block:
   for (module, seed, _) in Recipes:
     c.check(module in recipeScript and $seed in recipeScript,
       "36: tools/record_fixture.sh carries the " & module & " recipe")
-  if dirExists("tests/fixtures"):
-    for kind, path in walkDir("tests/fixtures"):
-      if kind != pcFile or not path.endsWith(".replay"):
-        continue
-      let decoded = decodeReplay(readFile(path))
-      c.check(decoded.gameVersion == GameVersion,
-        "36: committed fixture " & path & " is not stale")
+  ## The three fixtures are COMMITTED, and tools/wasm_replay_smoke.cjs runs
+  ## the exact emitted wasm module over them in ci.yml's wasm-viewer job --
+  ## wasm32-only failures (integer traps, address-space exhaustion) are
+  ## invisible to these 64-bit shards. Here they are checked natively: the
+  ## version they carry, and that they still re-derive against the CURRENT
+  ## rules. A rules change that leaves them behind fails here, which is the
+  ## re-record signal.
+  c.check(dirExists("tests/fixtures"), "36: tests/fixtures is committed")
+  var found = 0
+  for kind, path in walkDir("tests/fixtures"):
+    if kind != pcFile or not path.endsWith(".replay"):
+      continue
+    inc found
+    let bytes = readFile(path)
+    let decoded = decodeReplay(bytes)
+    c.check(decoded.gameVersion == GameVersion,
+      "36: committed fixture " & path & " is not stale")
+    c.check(decoded.gameName == GameName,
+      "36: committed fixture " & path & " is this game")
+    var rt = loadReplay(bytes)
+    c.check(rt.mismatchTurn == -1,
+      "36: committed fixture " & path & " still re-derives under the " &
+      "current rules (mismatch at turn " & $rt.mismatchTurn & "); " &
+      "re-record with tools/record_fixture.sh")
+    c.check(rt.replay.turns.len >= 10,
+      "36: committed fixture " & path & " has turns to replay")
+  c.check(found == 3,
+    "36: all three module fixtures are committed (found " & $found & ")")
+  let workflow = readFile(".github/workflows/ci.yml")
+  c.check("wasm_replay_smoke.cjs" in workflow,
+    "36: and ci.yml runs the wasm module over them")
 
 c.report()

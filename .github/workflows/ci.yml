@@ -299,6 +299,29 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Run the wasm module against the committed fixtures
+        # The native shards run 64-bit: `int` is 64 bits and a multi-GB
+        # allocation succeeds. The SHIPPED viewer is --cpu:wasm32, where `int`
+        # is 32 bits (overflow checks trap on arithmetic that is silently fine
+        # natively) and the address space ends at 2 GB. Both classes of bug
+        # have reached prod invisible to a green native suite. This runs the
+        # EXACT emitted module, headless, over each committed fixture -- one
+        # per rule module -- and fails on a load rejection, an empty packet, a
+        # dead frame or a hash mismatch against the recording.
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          fixtures=(tests/fixtures/*.replay)
+          test "${#fixtures[@]}" -eq 3 || {
+            echo "::error::expected three committed fixtures in tests/fixtures,"
+            echo "::error::found ${#fixtures[@]}. Re-record with tools/record_fixture.sh."
+            exit 1; }
+          for fixture in "${fixtures[@]}"; do
+            echo "::group::wasm_replay_smoke ${fixture}"
+            node tools/wasm_replay_smoke.cjs dist/static-replay-viewer "${fixture}" 300
+            echo "::endgroup::"
+          done
+
       - name: Install Playwright (pinned 1.55.0)
         run: |
           set -euo pipefail
