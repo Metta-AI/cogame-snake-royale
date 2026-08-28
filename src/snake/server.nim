@@ -238,6 +238,15 @@ proc websocketHandler(socket: WebSocket, event: WebSocketEvent,
           body = liveStateJson(shared.episode, shared.playing)
         socket.send(body)
     of MessageEvent:
+      ## mummy hands Ping frames to the application instead of answering
+      ## them itself; the platform's certifier pings `/global` to check the
+      ## game is alive, so an unanswered ping fails certification with
+      ## `game_contract_violation`.
+      if message.kind == Ping:
+        socket.send(message.data, Pong)
+        return
+      if message.kind != TextMessage:
+        return
       if slot >= 0 and message.data.len > 0:
         applyRegistration(slot, message.data)
     of CloseEvent, ErrorEvent:
