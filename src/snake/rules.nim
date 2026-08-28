@@ -202,11 +202,21 @@ proc willOccupy*(state: GameState, mover: int, c: Cell): bool =
 
 proc headOnOutcome*(state: GameState, mover: int, target: Cell): HeadRisk =
   ## What a head-on in `target` would mean for `mover`, by this board's rule.
-  ## A rival can contest `target` when its head is one legal step away.
+  ## A rival can contest `target` when its head is one legal step away -- its
+  ## own neck does not count, because step 2 repairs a neck move away before
+  ## step 9 ever groups the targets.
+  ##
+  ## The four outcomes are the resolver's own, so the observation, the system
+  ## prompt and both baselines read the same vocabulary: `win` is "I am
+  ## strictly the longest here and everybody else in the cell dies", `lose` is
+  ## "exactly one rival is strictly longer and it lives, I do not", and `tie`
+  ## is "nobody is strictly longest, so everyone in the cell dies" -- which is
+  ## every equal-length contest under `longer_wins`, not just `both_die`.
   var
     contested = false
     myLength = state.snakes[mover].length()
-    strictlyLongest = true
+    longestOther = 0
+    longestCount = 0
   for c in state.food:
     if c == target:
       inc myLength
@@ -215,9 +225,14 @@ proc headOnOutcome*(state: GameState, mover: int, target: Cell): HeadRisk =
     if slot == mover or not state.snakes[slot].alive:
       continue
     var canReach = false
+    let n = state.snakes[slot].neck()
     for d in DirOrder:
       let moved = state.rules.board.step(state.snakes[slot].head(), d)
-      if not moved.offBoard and moved.cell == target:
+      if moved.offBoard:
+        continue
+      if n.has and moved.cell == n.cell:
+        continue
+      if moved.cell == target:
         canReach = true
         break
     if not canReach:
@@ -228,13 +243,19 @@ proc headOnOutcome*(state: GameState, mover: int, target: Cell): HeadRisk =
       if c == target:
         inc theirLength
         break
-    if theirLength >= myLength:
-      strictlyLongest = false
+    if theirLength > longestOther:
+      longestOther = theirLength
+      longestCount = 1
+    elif theirLength == longestOther:
+      inc longestCount
   if not contested:
     return hrSafe
   if state.rules.headToHead == hhBothDie:
     return hrTie
-  if strictlyLongest: hrWin else: hrLose
+  if myLength > longestOther: hrWin
+  elif myLength == longestOther: hrTie      ## no strict greatest: all die
+  elif longestCount > 1: hrTie              ## nor is there one among them
+  else: hrLose
 
 proc freeSpaceAfter*(state: GameState, mover: int, target: Cell,
                      cap: int): int =

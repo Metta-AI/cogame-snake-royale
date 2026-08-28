@@ -232,6 +232,67 @@ block:
   check not both.snakes[0].alive and not both.snakes[1].alive,
     "7: both_die ignores length"
 
+# 7b. head_risk vocabulary ---------------------------------------------------
+block:
+  ## `head_risk` is the observation's own word for what a head-on in that cell
+  ## would mean (design §observation: safe | win | tie | lose), and all four
+  ## must be reachable on the FLAGSHIP module. Under `longer_wins` an
+  ## equal-length contest is not a `lose`: nobody is strictly longest, so
+  ## everybody in the cell dies, which is exactly a `tie`.
+  check [$hrSafe, $hrWin, $hrTie, $hrLose] == ["safe", "win", "tie", "lose"],
+    "7b: the four risk words are the observation's"
+
+  var strict = blankState(9, 9)
+  strict.put(0, @[cell(3, 4), cell(2, 4), cell(1, 4)], dRight)   ## length 3
+  strict.put(1, @[cell(5, 4), cell(6, 4)], dLeft)                ## length 2
+  check headOnOutcome(strict, 0, cell(4, 4)) == hrWin,
+    "7b: strictly longest is a win"
+  check headOnOutcome(strict, 1, cell(4, 4)) == hrLose,
+    "7b: and the shorter one loses"
+  check headOnOutcome(strict, 0, cell(3, 3)) == hrSafe,
+    "7b: an uncontested cell is safe"
+
+  var equal = blankState(9, 9)
+  equal.put(0, @[cell(3, 4), cell(2, 4)], dRight)
+  equal.put(1, @[cell(5, 4), cell(6, 4)], dLeft)
+  check headOnOutcome(equal, 0, cell(4, 4)) == hrTie,
+    "7b: equal lengths under longer_wins are a TIE, not a loss"
+  check headOnOutcome(equal, 1, cell(4, 4)) == hrTie, "7b: for both of them"
+  var settled = equal
+  var dirs: array[Seats, Dir]
+  dirs[0] = dRight
+  dirs[1] = dLeft
+  discard resolveTurn(settled, dirs, noAlt())
+  check not settled.snakes[0].alive and not settled.snakes[1].alive,
+    "7b: and the resolver agrees -- everybody in that cell dies"
+
+  ## Two rivals tied above me: there is still no strictly greatest snake, so
+  ## nobody survives the cell and my risk is `tie`, not `lose`.
+  var pair = blankState(9, 9)
+  pair.put(0, @[cell(4, 5)], dUp)                                ## length 1
+  pair.put(1, @[cell(3, 4), cell(2, 4)], dRight)                 ## length 2
+  pair.put(2, @[cell(5, 4), cell(6, 4)], dLeft)                  ## length 2
+  check headOnOutcome(pair, 0, cell(4, 4)) == hrTie,
+    "7b: no strictly greatest rival either, so it is a tie"
+  check headOnOutcome(pair, 1, cell(4, 4)) == hrTie,
+    "7b: and the tied rivals see the same"
+
+  ## A rival cannot contest a cell by moving into its OWN NECK -- step 2
+  ## repairs that away before step 9 ever groups the targets -- so the cell a
+  ## rival's tail is vacating is safe to follow, not a head-on risk.
+  var behind = blankState(9, 9)
+  behind.put(0, @[cell(3, 4), cell(2, 4)], dRight)
+  behind.put(1, @[cell(5, 4), cell(4, 4)], dRight)   ## its neck IS [4,4]
+  check headOnOutcome(behind, 0, cell(4, 4)) == hrSafe,
+    "7b: a rival's own neck is not a way for it to reach that cell"
+  var followed = behind
+  var dirs2: array[Seats, Dir]
+  dirs2[0] = dRight                       ## onto the vacating tail
+  dirs2[1] = dRight                       ## away
+  discard resolveTurn(followed, dirs2, noAlt())
+  check followed.snakes[0].alive,
+    "7b: and the resolver agrees -- the tail vacates and the follow lives"
+
 # 8. head-on precedes body ---------------------------------------------------
 block:
   ## The loser's neck sits exactly where the winner's head lands. If body
