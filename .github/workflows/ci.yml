@@ -259,6 +259,11 @@ jobs:
           # them. tools/replay_summary.py is the strict-UTF-8-JSON view of a
           # replay for anyone holding the file.
           SMOKE_REQUIRE_REPLAY_JSON: "0"
+          # ...so the artifact is named for what it holds. The shared script's
+          # default path ends in .json, which described the bytes for a game
+          # whose replay IS json and does not describe these. The viewer step
+          # below globs *.replay first.
+          SMOKE_REPLAY_OUT: ${{ github.workspace }}/dist/smoke/episode.replay
         run: ./tools/ci/docker_smoke.sh "${IMAGE}:ci"
 
       # The replay this episode produced is the ONLY replay in CI that is
