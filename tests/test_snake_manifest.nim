@@ -2,7 +2,7 @@
 ## would otherwise not catch until phase 40.
 
 import std/[json, sets, strutils]
-import snake/[rules, sim_types]
+import snake/[rules, sim_config, sim_types]
 import helpers
 
 var c = newChecker("test_snake_manifest")

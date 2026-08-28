@@ -10,7 +10,7 @@ var c = newChecker("test_snake_endcard_labels")
 proc stripComments(text: string): string =
   ## Drops HTML comments, CSS block comments and JS line comments, so a scar
   ## note that MENTIONS the old vocabulary is not a finding.
-  var out = ""
+  var kept = ""
   var i = 0
   while i < text.len:
     if text.startsWith("<!--", i):
@@ -23,9 +23,9 @@ proc stripComments(text: string): string =
       let close = text.find('\n', i)
       i = if close < 0: text.len else: close
     else:
-      out.add(text[i])
+      kept.add(text[i])
       inc i
-  out
+  kept
 
 let page = stripComments(readFile("client/replay_broadcast.html"))
 let core = stripComments(readFile("client/broadcast_core.js"))

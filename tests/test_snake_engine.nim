@@ -1,9 +1,8 @@
 ## End-to-end episodes: the artifacts, the certification seed, every shipped
 ## variant, the no-stall guarantee and the budget guard.
 
-import std/[json, os, sets, strutils, tables]
-import snake/[board, rules, sim, sim_types, baselines, engine, replays,
-              records, events]
+import std/[json, os, sets, strutils]
+import snake/[rules, sim, sim_types, engine, replays, records, events]
 import helpers
 
 var c = newChecker("test_snake_engine")

@@ -24,7 +24,7 @@
 ## of the seed and the resolution order, so the wasm module re-derives every
 ## apple and the per-turn `gameHash` proves it.
 
-import std/[json, strutils]
+import std/json
 import board, sim, sim_types
 
 type

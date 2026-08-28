@@ -13,7 +13,7 @@
 ## instead of growing in.
 
 import std/[json, strutils, tables]
-import board, rules, sim, sim_types, replays, events, directives
+import board, rules, sim, sim_types, replays, events
 
 type
   Snapshot* = object

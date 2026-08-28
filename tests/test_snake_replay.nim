@@ -3,7 +3,7 @@
 ## GameVersion.
 
 import std/[json, os, osproc, strutils, unicode]
-import snake/[board, rules, sim, sim_types, baselines, engine, replays,
+import snake/[board, rules, sim, sim_types, engine, replays,
               records, replay_runtime, directives]
 import helpers
 
@@ -87,11 +87,11 @@ block:
   var notes = ""
   for _ in 0 ..< MaxNoteRunes:
     notes.add("\u{1F600}")
-  var order = SnakeOrder(dir: dUp, say: sanitizeSay(say),
-    notes: sanitizeNote(notes), source: dsLlm)
   ## sanitizeSay strips non-ASCII by design (the printable shout filter), so
   ## the emoji path is exercised through the NOTE and through a directive
-  ## record built with the raw truncation.
+  ## record built with the raw rune truncation.
+  doAssert sanitizeSay(say).len == 0
+  doAssert sanitizeNote(notes).runeLen == MaxNoteRunes
   var replay = played.replay
   replay.chats.add($(%*{
     "k": "directive", "turn": 1, "slot": 0, "alias": cogAlias(0),

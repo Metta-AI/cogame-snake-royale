@@ -461,18 +461,20 @@ block:
   for path in ["src/snake/board.nim", "src/snake/rules.nim",
                "src/snake/space.nim"]:
     let text = readFile(path)
-    for i, line in text.splitLines():
+    var lineNo = 0
+    for line in text.splitLines():
+      inc lineNo
       check "sqrt" notin line,
-        "17: " & path & ":" & $(i + 1) & " uses sqrt"
+        "17: " & path & ":" & $lineNo & " uses sqrt"
       check "/" notin line,
-        "17: " & path & ":" & $(i + 1) & " uses a division operator"
+        "17: " & path & ":" & $lineNo & " uses a division operator"
       var digitBeforeDot = false
       for k in 1 ..< line.len:
         if line[k] == '.' and line[k - 1] in {'0' .. '9'} and
             k + 1 < line.len and line[k + 1] in {'0' .. '9'}:
           digitBeforeDot = true
       check not digitBeforeDot,
-        "17: " & path & ":" & $(i + 1) & " has a float literal"
+        "17: " & path & ":" & $lineNo & " has a float literal"
 
 # 18. turn budget ------------------------------------------------------------
 block:

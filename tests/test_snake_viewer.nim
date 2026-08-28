@@ -70,16 +70,17 @@ block:
   ## `var markBeat = C.markBeat, ...`. A game-block FUNCTION of the same name
   ## would shadow it and render unlabelled div markers that never seek.
   let banner = page.find("SNAKE-ROYALE additions")
-  let block = page[banner .. ^1]
+  let appended = page[banner .. ^1]
   for alias in ["markBeat", "killMarkerTeam", "renderBeatMarkers", "teamCol",
                 "activeTeams", "teamOf", "rosterName", "renderClock",
                 "renderTransport", "ingestBeats", "ingestLullSpans",
                 "renderMomentum", "recordMomentum", "setVerdict", "esc",
                 "fmt", "togglePov", "getSpoilers", "setSpoilers"]:
-    c.check(("function " & alias & "(") notin block,
+    c.check(("function " & alias & "(") notin appended,
       "41: the game block does not shadow " & alias)
-  c.check("function snakeBeat(" in block, "41: the beat builder is snakeBeat")
-  c.check("markBeat(" notin block, "41: the block never calls markBeat")
+  c.check("function snakeBeat(" in appended, "41: the beat builder is snakeBeat")
+  c.check("markBeat(" notin appended,
+    "41: the game block never calls markBeat")
 
 # 42 -- beat CSS matches emitted kinds exactly.
 block:

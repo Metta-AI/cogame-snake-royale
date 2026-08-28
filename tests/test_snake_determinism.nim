@@ -2,8 +2,7 @@
 ## fresh sim: identical final turn, bodies, food, health, alive flags and
 ## per-turn gameHash.
 
-import snake/[board, rules, sim, sim_types, replays, replay_runtime, engine,
-              baselines]
+import snake/[board, rules, sim, sim_types, replays, replay_runtime, engine]
 import helpers
 
 var c = newChecker("test_snake_determinism")

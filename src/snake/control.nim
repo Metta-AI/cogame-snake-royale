@@ -5,7 +5,7 @@
 ## Forked from `coworld-ctf`'s `src/ctf/control.nim`, which held the same
 ## invariant for `holdline`.
 
-import rules, baselines, directives
+import board, rules, baselines, directives
 
 const FallbackBaseline* = blCoil
   ## `coil` is the survival heuristic: the certification player, the per-turn

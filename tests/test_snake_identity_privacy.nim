@@ -29,9 +29,6 @@ for slot in 0 ..< Seats:
   let node = parseJson(view)
   c.check(node{"your_notes"}.getStr() == "my own private note",
     "your_notes is the seat's OWN previous note")
-  var noteCount = 0
-  for ch in view:
-    discard ch
   c.check(view.count("my own private note") == 1,
     "and no other seat's note is in it")
   ## spawnDeal is never in an observation.
