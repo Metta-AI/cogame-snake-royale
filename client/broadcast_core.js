@@ -3,8 +3,9 @@
 // FORKED from coworld-ctf's client/broadcast_core.js. That file is paintbot's
 // continuous-2-D draw layer over the Bitworld sprite protocol; this game is a
 // small integer grid, so the sprite/layer compositor, every weapon, paint,
-// hill, flag and fog draw call, the first-person pipeline and attachMinimap's
-// callers are DELETED (design note §Viewer -> Chrome provenance). What is kept
+// hill, flag and fog draw call, the first-person pipeline and the whole
+// zoom/pan/minimap surface are DELETED (design note §Viewer -> Chrome
+// provenance: #viewpanel goes entirely). What is kept
 // is the shape the page depends on: the same `window.BroadcastCore.create`
 // factory and the same method surface, the canvas/DPR sizing, the letterbox
 // fit and its `onTransform` callback, the status/text callbacks, the first
@@ -528,13 +529,12 @@
       },
       setViewportFit: function () { scheduleDraw(); },
       getTransform: function () { return transform; },
-      // The zoom bar and the minimap are DROPPED for this game: all three
-      // boards are small fixed rectangles with no off-frame area, so there is
-      // nothing to pan to. These stay as no-ops so the shared shell never has
-      // to branch on which game it is driving.
-      zoomAt: function () { }, setZoom: function () { },
-      panBy: function () { }, panByMap: function () { }, panTo: function () { },
-      resetView: function () { }, attachMinimap: function () { },
+      // The zoom bar and the minimap (#viewpanel) are DROPPED for this game --
+      // markup, CSS, wiring and stubs. All three boards are small fixed
+      // rectangles that relayout() letterboxes whole at every width, so there
+      // is nothing to pan to and nothing to shrink into a minimap. The
+      // no-op stubs are gone too: a method that exists and does nothing is
+      // indistinguishable from one that works.
       getPaceStats: function () {
         return { enabled: false, queued: 0, presented: 0, interval: 1000 / 24,
           draws: drawCount };

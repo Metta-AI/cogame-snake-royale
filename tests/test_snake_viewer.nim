@@ -253,6 +253,26 @@ block:
     c.check(gone notin body, "43: " & gone & " is gone")
   c.check("attachMinimap(" notin body,
     "43: and nothing calls attachMinimap")
+  ## #viewpanel is dropped ENTIRELY, not hidden: the residual no-op stubs and
+  ## the shell's minimap transfer are gone too. A method that exists and does
+  ## nothing is indistinguishable from one that works.
+  let shell = readFile("replay-viewer/static_replay.js")
+  let worker = readFile("replay-viewer/static_replay_worker.js")
+  for gone in ["zoomAt", "setZoom", "panBy", "panByMap", "panTo",
+               "resetView", "attachMinimap", "transferControlToOffscreen()"]:
+    c.check(gone notin core,
+      "43: the renderer carries no " & gone & " stub")
+  for gone in ["attachMinimap", "pendingMinimap", "sendMinimap",
+               "'minimap'", "action === 'zoom'"]:
+    c.check(gone notin shell and gone notin worker,
+      "43: and neither shell nor worker still wires " & gone)
+  ## What the shell DOES keep: the board canvas transfer and the API the page
+  ## really calls.
+  c.check("canvas.transferControlToOffscreen()" in shell,
+    "43: the board canvas is still handed to the worker")
+  for kept in ["sendCommand:", "setViewportFit:", "getTransform:",
+               "clickMap:", "start:", "stop:"]:
+    c.check(kept in shell, "43: the shell keeps " & kept)
   # No game-block element is positioned inside the transport band.
   let blockText = page[banner .. ^1]
   c.check("#transport" notin blockText,
