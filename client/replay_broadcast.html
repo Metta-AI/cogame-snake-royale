@@ -1763,7 +1763,17 @@ body[data-embed] #board { top: 0; height: 100%; }
       // The re-mapped endcard header. A forked ctf endcard otherwise ships
       // paintbot's vocabulary; tests/test_snake_endcard_labels.nim greps the
       // built page for it and fails the build if it comes back.
-      table.innerHTML = '<div class="ec-thead"><span>Cog</span>' +
+      // The winner's headline pair, in the starter's own ec-lives shape with
+      // the two enumerated re-labels: "Lives left" -> "Turns survived" and
+      // "Hill time" -> "Final length" (design note §Endcard and chrome label
+      // re-mapping). Filled below from the results document.
+      table.innerHTML = '<div class="ec-lives">' +
+        '<span class="fl-num" id="ec-turns">0</span>' +
+        '<span class="fl-cap">Turns survived</span>' +
+        '<span class="fl-num" id="ec-length">0</span>' +
+        '<span class="fl-cap">Final length</span>' +
+        '</div>' +
+        '<div class="ec-thead"><span>Cog</span>' +
         '<span>Place</span><span>Turns</span><span>Length</span>' +
         '<span>Ate</span><span>Soft</span></div>';
       host.appendChild(table);
@@ -1903,6 +1913,8 @@ body[data-embed] #board { top: 0; height: 100%; }
     }
     var best = 0;
     for (var k = 1; k < r.place.length; k++) if (r.place[k] < r.place[best]) best = k;
+    CTX.C.setName('ec-turns', String(r.survivedTurns[best]));
+    CTX.C.setName('ec-length', String(r.finalLength[best]));
     CTX.C.setName('ec-headline', r.names[best] + ' SURVIVES — ' +
       r.finalLength[best] + ' long, ' + r.foodEaten[best] + ' eaten, ' +
       r.survivedTurns[best] + ' turns');

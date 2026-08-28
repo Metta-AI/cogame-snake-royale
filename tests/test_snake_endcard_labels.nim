@@ -56,6 +56,8 @@ const Replacements = [
   ("<span>Cog</span>", 1), ("<span>Place</span>", 1),
   ("<span>Turns</span>", 1), ("<span>Length</span>", 1),
   ("<span>Ate</span>", 1), ("<span>Soft</span>", 1),
+  ("<span class=\"fl-cap\">Turns survived</span>", 1),
+  ("<span class=\"fl-cap\">Final length</span>", 1),
   ("Coiling up", 2),                  ## the markup and the locker-room script
   ("Before the first move", 2),       ## the markup and renderClockLine
   ("showing recorded moves", 2),      ## the markup and renderMismatch

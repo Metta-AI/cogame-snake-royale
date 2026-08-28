@@ -294,6 +294,20 @@
     if (doc.querySelectorAll('#ec-teams .ec-row').length !== 4) {
       return 'the endcard table is not four rows';
     }
+    var caps = doc.querySelectorAll('#endcard .fl-cap');
+    var capText = '';
+    for (var q = 0; q < caps.length; q++) capText += caps[q].textContent + '|';
+    if (capText.indexOf('Turns survived') < 0 ||
+        capText.indexOf('Final length') < 0) {
+      return 'the endcard is missing the re-labelled captions: ' + capText;
+    }
+    var winner = results();
+    if (doc.querySelector('#ec-turns').textContent !==
+          String(winner.survivedTurns[0]) ||
+        doc.querySelector('#ec-length').textContent !==
+          String(winner.finalLength[0])) {
+      return 'the endcard headline pair does not carry the winner\'s numbers';
+    }
     // ...and every seek takes it back down (checklist 14c).
     drive(JSON.stringify(chromeDoc(board, seats, 12, false)));
     if (card.className.indexOf('on') >= 0) {
