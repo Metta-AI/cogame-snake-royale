@@ -332,6 +332,7 @@ proc runEpisode*(host: string, port: int, config: GameConfig,
     engine = initDecisionEngine(config)
     replay = Replay(gameName: GameName, gameVersion: GameVersion)
     allEvents: seq[TurnEvent]
+    directiveEvents: seq[DirectiveEvent]
     episode: Episode
 
   withLock stateLock:
@@ -428,6 +429,12 @@ proc runEpisode*(host: string, port: int, config: GameConfig,
           dec episode.seats[slot].sayTurnsLeft
         replay.chats.add(boundedDirectiveRecord(order, episode.state.turn + 1,
           slot, cogAlias(slot), ""))
+        ## The tier-2 stream's `directive` row: a fact about the DECISION, so
+        ## no board event carries it.
+        directiveEvents.add(DirectiveEvent(turn: episode.state.turn + 1,
+          slot: slot, alias: cogAlias(slot), source: $order.source,
+          dir: $order.dir, latencyMs: order.latencyMs,
+          repaired: order.repaired))
 
       let before = episode.state
       var turnEvents = resolveTurn(episode.state, dirs, alts)
@@ -481,7 +488,8 @@ proc runEpisode*(host: string, port: int, config: GameConfig,
   writeCogameUri(rt.replayUri, "COGAME_SAVE_REPLAY_URI", encodeReplay(replay))
   if rt.eventsUri.len > 0:
     writeCogameUri(rt.eventsUri, "COGAME_EVENTS_URI",
-      eventsJsonl(allEvents, episode.turnsPlayed, GameVersion))
+      eventsJsonl(allEvents, episode.turnsPlayed, GameVersion,
+                  directiveEvents))
   var missing: seq[int]
   for slot in 0 ..< Seats:
     if episode.seats[slot].dead:

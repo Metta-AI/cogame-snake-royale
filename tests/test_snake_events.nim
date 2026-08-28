@@ -2,7 +2,7 @@
 ## exactly seven of them, and every kind the appended viewer block consumes is
 ## in the set.
 
-import std/[sets, strutils]
+import std/[json, sets, strutils]
 import snake/[rules, events, sim, sim_types, baselines, engine, labels,
               records, replays, replay_runtime]
 import helpers
@@ -96,5 +96,68 @@ block:
   c.check("\"k\":\"fallback\"" in eventsJsonl(rt.events, rt.replay.turns.len,
     GameVersion),
     "and the tier-2 analysis stream carries a fallback row")
+
+# The tier-2 analysis stream is the design note's REDUCED vocabulary, not the
+# broadcast enum.
+block:
+  var config = defaultGameConfig()
+  config.seed = 42
+  config.maxTurns = 40
+  let played = runScriptedEpisode(config, certificationSeats())
+  let directives = @[
+    DirectiveEvent(turn: 1, slot: 0, alias: cogAlias(0), source: "llm",
+      dir: "up", latencyMs: 210, repaired: false),
+    DirectiveEvent(turn: 2, slot: 3, alias: cogAlias(3), source: "scripted",
+      dir: "left", latencyMs: 0, repaired: true)]
+  let jsonl = eventsJsonl(played.events, played.episode.turnsPlayed,
+    GameVersion, directives)
+  var kinds = initHashSet[string]()
+  var rows = 0
+  var summary = newJNull()
+  for line in jsonl.strip().splitLines():
+    let node = parseJson(line)
+    if node{"type"}.getStr() == "summary":
+      summary = node
+      continue
+    inc rows
+    kinds.incl(node{"k"}.getStr())
+  var reduced = initHashSet[string]()
+  for kind in SimEventKind:
+    reduced.incl(key(kind))
+  c.check(reduced.len == 14, "the reduced vocabulary is fourteen kinds")
+  c.check(kinds <= reduced,
+    "every tier-2 row is one of them; extra=" & $(kinds - reduced))
+  for gone in ["gamestart", "spawn", "end"]:
+    c.check(gone notin kinds,
+      "the tier-2 stream does not carry the broadcast-only kind " & gone)
+  c.check("directive" in kinds,
+    "and it DOES carry the directive rows the sim cannot derive")
+  c.check("turn" in kinds and "move" in kinds and "death" in kinds,
+    "with the board kinds it does carry")
+  c.check(summary.kind == JObject, "the summary row is present")
+  if summary.kind == JObject:
+    c.check(summary{"events"}.getInt() == rows,
+      "and counts the rows it is a summary of")
+    c.check(summary{"turns"}.getInt() == played.episode.turnsPlayed,
+      "and the turns")
+    c.check(summary{"gameVersion"}.getStr() == GameVersion,
+      "and the game version")
+  ## A turn's directive precedes that turn's board events: the decision comes
+  ## before the resolution.
+  var firstDirective = -1
+  var firstTurnEvent = -1
+  var index = 0
+  for line in jsonl.strip().splitLines():
+    let node = parseJson(line)
+    if node{"k"}.getStr() == "directive" and firstDirective < 0:
+      firstDirective = index
+    if node{"k"}.getStr() == "turn" and node{"t"}.getInt() == 1 and
+        firstTurnEvent < 0:
+      firstTurnEvent = index
+    inc index
+  c.check(firstDirective >= 0 and firstTurnEvent >= 0,
+    "both a directive and a turn row exist")
+  c.check(firstDirective < firstTurnEvent,
+    "turn 1's directive comes before turn 1's board events")
 
 c.report()
