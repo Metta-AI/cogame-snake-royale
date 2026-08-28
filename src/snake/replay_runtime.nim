@@ -285,12 +285,17 @@ proc advance*(rt: var ReplayRuntime) =
       rt.playback.frame = last
       rt.playback.playing = false
 
-proc seekFraction*(rt: var ReplayRuntime, fraction: float) =
+proc seekTurn*(rt: var ReplayRuntime, turn: int) =
+  ## The scrubber and every beat button send an ABSOLUTE TURN on the axis the
+  ## chrome draws (`st` .. `mx`), exactly as the starter's global.nim reads
+  ## `s:<tick>`. Parsing it as a fraction instead would clamp every non-zero
+  ## click to 1.0 and land the viewer on the last frame -- which also RAISES
+  ## the endcard rather than dismissing it, because `over` is `turn >= turns`.
   let last = rt.totalFrames() - 1
-  var f = fraction
-  if f < 0.0: f = 0.0
-  if f > 1.0: f = 1.0
-  rt.playback.frame = int(f * last.float)
+  var t = turn
+  if t < 0: t = 0
+  if t > rt.snapshots.len - 1: t = rt.snapshots.len - 1
+  rt.playback.frame = min(last, t * rt.playback.framesPerTurn)
 
 proc command*(rt: var ReplayRuntime, text: string) =
   ## The transport commands the chrome sends down the same channel the native
@@ -314,10 +319,11 @@ proc command*(rt: var ReplayRuntime, text: string) =
   of '8': rt.playback.speed = 8
   of '6': rt.playback.speed = 16
   of 's':
-    let parts = text.split(':')
-    if parts.len == 2:
+    ## `s:<tick>` -- an absolute turn, the starter's wire word
+    ## (coworld-ctf src/ctf/global.nim: `parseInt(item.text[2 .. ^1])`).
+    if text.len > 2 and text[1] == ':':
       try:
-        rt.seekFraction(parseFloat(parts[1]))
-      except CatchableError:
+        rt.seekTurn(parseInt(text[2 .. ^1].strip()))
+      except ValueError:
         discard
   else: discard

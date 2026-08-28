@@ -44,6 +44,35 @@ for endRule in [erLastStanding, erFullTime, erWallClock, erSimFault]:
     c.check(rt.stopTurn == played.episode.state.turn,
       $endRule & ": and names the stop turn")
 
+# 33b -- the transport's `s:<tick>` is a TICK, on the axis the chrome draws.
+block:
+  ## `seekToFraction` in client/replay_broadcast.html sends an absolute turn
+  ## (`st + round(frac * (mx - st))`), which is the starter's wire word. A
+  ## runtime that read it as a FRACTION clamped every non-zero click to 1.0,
+  ## landed on the last frame and RAISED the endcard (`over` is
+  ## `turn >= turns`) instead of dismissing it.
+  let played = runScriptedEpisode(config("royale", 42, 40), certificationSeats())
+  var rt = loadReplay(encodeReplay(played.replay))
+  let turns = rt.snapshots.len - 1
+  c.check(turns >= 10, "33b: the fixture is long enough to scrub")
+  let midway = turns div 2
+  rt.command("s:" & $midway)
+  c.check(rt.turnAt(rt.playback.frame) == midway,
+    "33b: s:<tick> lands on that turn (got " &
+    $rt.turnAt(rt.playback.frame) & " of " & $turns & ")")
+  c.check(rt.turnAt(rt.playback.frame) < turns,
+    "33b: a midway seek is NOT the last turn, so the endcard comes down")
+  rt.command("s:0")
+  c.check(rt.playback.frame == 0, "33b: s:0 is the first frame")
+  rt.command("s:" & $(turns + 500))
+  c.check(rt.turnAt(rt.playback.frame) == turns,
+    "33b: a tick past the end clamps to the last turn")
+  rt.command("s:-3")
+  c.check(rt.playback.frame == 0, "33b: a negative tick clamps to zero")
+  let page = readFile("client/replay_broadcast.html")
+  c.check("send('s:' + (st + Math.round(frac * (mx - st))))" in page,
+    "33b: and the page still sends the tick the runtime now parses")
+
 # 34 -- the replay is self-sufficient.
 block:
   let played = runScriptedEpisode(config("geese", 7, 40), certificationSeats())
