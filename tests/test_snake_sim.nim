@@ -3,7 +3,8 @@
 ## conditions and the determinism greps (design note §Tests 1-18).
 
 import std/[os, strutils, times]
-import snake/[board, rules, space, sim, sim_types, sim_state, engine, baselines]
+import snake/[board, rules, space, sim, sim_types, sim_state, engine, baselines,
+              replays, replay_runtime]
 
 var failures = 0
 proc check(ok: bool, what: string) =
@@ -370,26 +371,86 @@ block:
     "13: which is fewer than a length-5 snake"
 
 block:
-  ## `trapped` is emitted EXACTLY on the false-to-true transition. A tron
+  ## `trapped` is emitted EXACTLY on the false-to-true transition, and never
+  ## on the turns either side of it. Hand-built so the pocket is unambiguous:
+  ## a 5x5 trail board where snake 1's column of trail seals snake 0 into the
+  ## two left columns, and snake 0 grows one cell a turn (no tail ever pops)
+  ## until its own room is smaller than it is.
+  var state = blankState(5, 5, leaveTrail = true)
+  state.put(0, @[cell(0, 0), cell(0, 1), cell(0, 2), cell(0, 3)], dUp)
+  state.put(1, @[cell(2, 4), cell(2, 3), cell(2, 2), cell(2, 1), cell(2, 0)],
+    dRight)
+  proc trappedIn(events: seq[TurnEvent], slot: int): seq[TurnEvent] =
+    for e in events:
+      if e.kind == ekTrapped and e.slot == slot:
+        result.add(e)
+
+  var dirs1: array[Seats, Dir]
+  dirs1[0] = dRight                       ## into [1,0]: 6 free, length 5
+  dirs1[1] = dRight
+  let turn1 = resolveTurn(state, dirs1, noAlt())
+  check state.snakes[0].freeSpace >= state.snakes[0].length(),
+    "13: not sealed in yet"
+  check not state.snakes[0].trapped, "13: so the flag is still false"
+  check trappedIn(turn1, 0).len == 0, "13: and no trapped event is emitted"
+
+  var dirs2: array[Seats, Dir]
+  dirs2[0] = dDown                        ## into [1,1]: 5 free, length 6
+  dirs2[1] = dRight
+  let turn2 = resolveTurn(state, dirs2, noAlt())
+  check state.snakes[0].alive, "13: the snake is still alive when it seals in"
+  check state.snakes[0].freeSpace < state.snakes[0].length(),
+    "13: now its room is smaller than it is"
+  check state.snakes[0].trapped, "13: so the flag turns true"
+  let fired = trappedIn(turn2, 0)
+  check fired.len == 1, "13: EXACTLY one trapped event on the transition"
+  if fired.len == 1:
+    check fired[0].turn == state.turn, "13: on this turn"
+    check fired[0].value == state.snakes[0].freeSpace,
+      "13: carrying the free-cell count that triggered it"
+    check fired[0].extra == state.snakes[0].length(),
+      "13: and the length it is measured against"
+
+  var dirs3: array[Seats, Dir]
+  dirs3[0] = dDown                        ## still trapped, one turn later
+  dirs3[1] = dUp
+  let turn3 = resolveTurn(state, dirs3, noAlt())
+  check state.snakes[0].trapped, "13: it is still trapped"
+  check trappedIn(turn3, 0).len == 0,
+    "13: and a snake that STAYS trapped emits nothing further"
+
+block:
+  ## The same property over a whole episode, checked against the resolver's
+  ## own per-turn flags: a `trapped` event exists for seat s on turn T if and
+  ## only if s is alive and trapped on T and was not trapped on T-1. A tron
   ## episode on a small board fills itself in, so the transition really
-  ## happens; the invariant is checked against the resolver's own numbers.
+  ## happens.
   var config = cfg("tron")
   config.boardW = 11
   config.boardH = 7
   config.maxTurns = 50
   let played = runScriptedEpisode(config, allCoil())
-
-  var pending: seq[tuple[turn, slot: int]]
-  for e in played.events:
-    if e.kind == ekTrapped:
-      pending.add((e.turn, e.slot))
-  check pending.len >= 0, "13: the trapped stream is well formed"
-  for entry in pending:
-    check entry.slot >= 0 and entry.slot < Seats,
-      "13: every trapped event names a seat"
-  ## Every trapped event carries the free-cell count and the length that
-  ## triggered it, and the count is strictly smaller.
-  for e in played.events:
+  var rt = loadReplay(encodeReplay(played.replay))
+  let turns = rt.snapshots.len - 1
+  var emitted = newSeq[array[Seats, int]](turns + 1)
+  for e in rt.events:
+    if e.kind == ekTrapped and e.turn >= 0 and e.turn <= turns and
+        e.slot >= 0 and e.slot < Seats:
+      inc emitted[e.turn][e.slot]
+  var transitions = 0
+  for turn in 1 .. turns:
+    for slot in 0 ..< Seats:
+      let want =
+        rt.snapshots[turn].alive[slot] and rt.snapshots[turn].trapped[slot] and
+        not rt.snapshots[turn - 1].trapped[slot]
+      if want:
+        inc transitions
+      check emitted[turn][slot] == (if want: 1 else: 0),
+        "13: trapped fires exactly on the false-to-true transition (turn " &
+        $turn & " seat " & $slot & ")"
+  check transitions >= 1,
+    "13: and this episode really does seal somebody in (" & $transitions & ")"
+  for e in rt.events:
     if e.kind == ekTrapped:
       check e.value < e.extra,
         "13: a trapped event reports freeSpace below the snake's length"
