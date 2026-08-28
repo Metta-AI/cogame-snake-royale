@@ -1656,7 +1656,24 @@ body[data-embed] #board { top: 0; height: 100%; }
   flex: 1 1 0;
   overflow: hidden;
 }
-#scorebug .plates .plate { flex: 1 1 0; min-width: 0; }
+#scorebug .plates .plate { flex: 1 1 0; min-width: 0; overflow: hidden; }
+/* Everything except the colour chip, the policy name and the length numeral
+   is allowed to SHRINK TO NOTHING before the plate can overflow: at 360 px a
+   plate is ~70 px wide, and a fixed-size label is what pushes the numeral off
+   the end. flex-shrink is the whole mechanism -- no width query needed. */
+#scorebug .plate .cog-alias,
+#scorebug .plate .len-label,
+#scorebug .plate .hp-label,
+#scorebug .plate .hpbar {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+#scorebug .plate .cog-chip,
+#scorebug .plate .len-num,
+#scorebug .plate .place-badge,
+#scorebug .plate .fbk { flex: 0 0 auto; }
 #clock .alive-badge {
   font-family: var(--pixfont);
   font-size: calc(17 * var(--u));
