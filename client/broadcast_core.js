@@ -78,6 +78,33 @@
     var i = COLOURS.indexOf(name);
     return i >= 0 ? COLOUR_HEX[i] : '#e8a33d';
   }
+
+  // ---- the say bubble's type ----------------------------------------------
+  // The bubble is laid out from the cap the SERVER enforces (MaxSayRunes),
+  // measured in the font it is drawn in -- never from whatever string happens
+  // to be in flight, which is how a remark grows into whatever is above it
+  // (the cogchemists 2026-08-24 scar). `data/font.ttf` is the game's own face
+  // and ships next to this file in the static bundle; the load is best-effort
+  // and the measurement always uses whichever face is actually active, so a
+  // failed load degrades to the fallback stack rather than to a wrong box.
+  var MAX_SAY_RUNES = WIRE.maxSayRunes || 24;
+  var SAY_FACE = 'system-ui, sans-serif';
+  var SAY_CAP_SAMPLE = new Array(MAX_SAY_RUNES + 1).join('W');
+  var sayCapWidths = {};
+  function sayFontFor(cell) { return Math.max(9, Math.round(cell * 0.42)); }
+  function sayBandFor(cell) { return Math.round(sayFontFor(cell) * 1.8) + 4; }
+  function loadSayFace() {
+    if (typeof globalScope.FontFace !== 'function' || !globalScope.fonts) return;
+    try {
+      var face = new globalScope.FontFace('snakeface',
+        'url(' + artBase + '/font.ttf)');
+      face.load().then(function (loaded) {
+        globalScope.fonts.add(loaded);
+        SAY_FACE = '"snakeface", system-ui, sans-serif';
+        sayCapWidths = {};              // re-measure the cap in the real face
+      }).catch(function () { });
+    } catch (error) { /* the fallback stack is already correct */ }
+  }
   function shade(hex, f) {
     var n = parseInt(hex.slice(1), 16);
     var r = Math.max(0, Math.min(255, Math.round(((n >> 16) & 255) * f)));
@@ -125,6 +152,7 @@
     };
 
     loadKit();
+    loadSayFace();
 
     function cssSize() {
       var w = viewportWidth || canvas.width || 1;
@@ -144,13 +172,24 @@
       var size = cssSize();
       var bw = state && state.board ? state.board.w : 17;
       var bh = state && state.board ? state.board.h : 9;
-      var cell = Math.max(2, Math.floor(
-        Math.min(size.w / bw, size.h / bh) * pixelRatio));
+      var availW = size.w * pixelRatio;
+      var availH = size.h * pixelRatio;
+      // The say band is RESERVED whether or not anybody is speaking, so the
+      // board does not move when a remark lands and a top-row snake's bubble
+      // always has somewhere to go. Its height comes from the cap, and the
+      // cap's font comes from the cell, so the fit is taken twice: once to
+      // learn the cell, once with the band that cell implies.
+      var cell = Math.max(2, Math.floor(Math.min(availW / bw, availH / bh)));
+      var band = sayBandFor(cell);
+      cell = Math.max(2, Math.floor(
+        Math.min(availW / bw, Math.max(1, availH - band) / bh)));
+      band = sayBandFor(cell);
       var pxW = cell * bw;
       var pxH = cell * bh;
-      var ox = Math.round((size.w * pixelRatio - pxW) / 2);
-      var oy = Math.round((size.h * pixelRatio - pxH) / 2);
-      return { cell: cell, ox: ox, oy: oy, w: bw, h: bh, pxW: pxW, pxH: pxH };
+      var ox = Math.round((availW - pxW) / 2);
+      var oy = band + Math.round(Math.max(0, availH - band - pxH) / 2);
+      return { cell: cell, ox: ox, oy: oy, w: bw, h: bh, pxW: pxW, pxH: pxH,
+               band: band };
     }
 
     function publishTransform(g) {
@@ -368,26 +407,46 @@
       }
     }
 
+    function sayBoxWidth(font) {
+      // Measured ONCE per font size, in the face the text is drawn in, from a
+      // full-cap sample -- so the box is the same for every remark and the
+      // widest legal remark still fits inside it.
+      if (sayCapWidths[font] === undefined) {
+        var was = ctx.font;
+        ctx.font = font + 'px ' + SAY_FACE;
+        sayCapWidths[font] = Math.ceil(
+          ctx.measureText(SAY_CAP_SAMPLE).width + font);
+        ctx.font = was;
+      }
+      return sayCapWidths[font];
+    }
+
     function drawBubbles(g) {
       if (!state.bubbles.length) return;
-      var font = Math.max(9, Math.round(g.cell * 0.42));
-      ctx.font = font + 'px system-ui, sans-serif';
+      // The font is the cell's, floored at 9 px, and then shrunk if a full-cap
+      // remark would not fit the board at that size: the STRING is never
+      // shortened to fit the box (a clipped sentence is the defect; a smaller
+      // sentence is not).
+      var font = sayFontFor(g.cell);
+      while (font > 9 && sayBoxWidth(font) > g.pxW - 4) font -= 1;
+      var w = Math.min(sayBoxWidth(font), Math.max(16, g.pxW - 4));
+      var h = font * 1.8;
+      ctx.font = font + 'px ' + SAY_FACE;
       ctx.textBaseline = 'middle';
       for (var i = 0; i < state.bubbles.length; i++) {
         var b = state.bubbles[i];
         var text = String(b.text || '');
         if (!text) continue;
-        var w = Math.min(ctx.measureText(text).width + font, g.pxW - 4);
-        var h = font * 1.8;
         // The box is laid out from the server's own cap on this string and
-        // then CLAMPED INSIDE the board rect, so a bubble on a top-row snake
-        // is never drawn at a negative y (the cogchemists 2026-08-24 scar).
+        // then CLAMPED INSIDE THE CANVAS, so a bubble on a top-row snake is
+        // never drawn at a negative y (the cogchemists 2026-08-24 scar): it
+        // rides the reserved band above the board instead.
         var x = g.ox + (b.x + 0.5) * g.cell - w / 2;
         var y = g.oy + b.y * g.cell - h - 2;
-        if (x < g.ox + 2) x = g.ox + 2;
-        if (x + w > g.ox + g.pxW - 2) x = g.ox + g.pxW - w - 2;
-        if (y < g.oy + 2) y = g.oy + (b.y + 1) * g.cell + 2;
-        if (y + h > g.oy + g.pxH - 2) y = g.oy + g.pxH - h - 2;
+        if (x < 2) x = 2;
+        if (x + w > canvas.width - 2) x = canvas.width - w - 2;
+        if (y < 2) y = 2;
+        if (y + h > canvas.height - 2) y = canvas.height - h - 2;
         ctx.fillStyle = 'rgba(20,14,9,0.86)';
         roundRect(ctx, x, y, w, h, h / 3);
         ctx.fill();

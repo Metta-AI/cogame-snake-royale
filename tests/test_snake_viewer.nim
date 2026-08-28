@@ -126,10 +126,22 @@ block:
     "43: rule 4 -- the ribbon halves in height under .tiny")
   c.check("#stage.tiny #killfeed .feed-row:nth-child(n+4)" in page,
     "43: and the feed shows three rows instead of four")
-  c.check("Math.max(9, Math.round(g.cell * 0.42))" in core,
+  c.check("Math.max(9, Math.round(cell * 0.42))" in core,
     "43: rule 3 -- the say bubble has a 9 px font floor")
-  c.check("if (y < g.oy + 2)" in core,
-    "43: and is clamped inside the board rect")
+  c.check("if (y < 2) y = 2;" in core,
+    "43: and is clamped inside the canvas, never at a negative y")
+  ## The band is sized from the SERVER's cap, measured in the face it is drawn
+  ## in, and reserved whether or not anybody is speaking.
+  c.check("WIRE.maxSayRunes" in core,
+    "43: the bubble reads the server's own say cap")
+  c.check("new Array(MAX_SAY_RUNES + 1).join('W')" in core,
+    "43: and measures a FULL-CAP sample, not the string in flight")
+  c.check("ctx.measureText(SAY_CAP_SAMPLE)" in core,
+    "43: in the font it will be drawn in")
+  c.check("function sayBandFor(cell)" in core and "band: band" in core,
+    "43: and the band is reserved in the layout")
+  c.check("oy = band +" in core,
+    "43: so the board sits below it whether or not anybody is speaking")
   # The removed ids appear nowhere but in the removal note.
   let banner = page.find("SNAKE-ROYALE additions")
   let body = page[0 ..< banner]
