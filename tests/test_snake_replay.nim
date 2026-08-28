@@ -3,7 +3,7 @@
 ## GameVersion.
 
 import std/[json, os, osproc, strutils, unicode]
-import snake/[board, rules, sim, sim_types, engine, replays,
+import snake/[board, rules, sim, sim_types, engine, baselines, replays,
               records, replay_runtime, directives]
 import helpers
 
@@ -28,21 +28,50 @@ proc config(module: string, seed, maxTurns: int): GameConfig =
 
 # 33 -- record then re-derive, every end reason.
 for endRule in [erLastStanding, erFullTime, erWallClock, erSimFault]:
-  var played = runScriptedEpisode(config("royale", 42, 40), certificationSeats())
-  var replay = played.replay
-  if endRule in {erWallClock, erSimFault}:
-    ## The load-bearing stop record: a wall-clock or fault fact cannot be
-    ## re-derived from sim state, so it is recorded once and applied by the
-    ## SAME proc on record and on playback (the particle-worlds scar).
-    replay.chats.add(stopRecord(played.episode.state.turn, $endRule))
-  let bytes = encodeReplay(replay)
+  ## The abnormal endings are RECORDED, not simulated after the fact: the
+  ## episode's own loop is cut at turn 12 and settles `deadline`/`wall_clock`
+  ## or `fault`/`sim_fault`, writing the stop record through the same proc the
+  ## server writes it with. So the replay really ends where the stop says it
+  ## does, which is what makes "identical gameHash at every turn INCLUDING the
+  ## stop turn" a claim about a stopped episode (the particle-worlds scar).
+  let
+    stopAt = (if endRule in {erWallClock, erSimFault}: 12 else: 0)
+    reason =
+      case endRule
+      of erWallClock: rsDeadline
+      of erSimFault: rsFault
+      else: rsComplete
+  var played = runScriptedEpisodeWith(config("royale", 42, 40),
+    certificationSeats(), CoilTunables, ForagerTunables,
+    stopAfterTurn = stopAt, stopReason = reason, stopEndRule = endRule)
+  let bytes = encodeReplay(played.replay)
   var rt = loadReplay(bytes)
   c.check(rt.mismatchTurn == -1,
     $endRule & ": identical gameHash at EVERY turn including the stop turn")
   if endRule in {erWallClock, erSimFault}:
+    c.check(played.episode.reason == reason,
+      $endRule & ": the episode really settled " & $reason)
+    c.check(played.episode.endRule == endRule,
+      $endRule & ": with that endRule")
+    c.check(played.replay.turns.len == 12,
+      $endRule & ": and the recorded turns stop where the loop did (" &
+      $played.replay.turns.len & ")")
     c.check(rt.stopEndRule == $endRule, $endRule & ": the stop record survives")
     c.check(rt.stopTurn == played.episode.state.turn,
       $endRule & ": and names the stop turn")
+    c.check(rt.snapshots.len - 1 == rt.stopTurn,
+      $endRule & ": the re-derivation ends on that same turn")
+    let results = parseJson(played.episode.snakeResultsJson())
+    c.check(results{"reason"}.getStr() == $reason,
+      $endRule & ": and the results document says so")
+    var total = 0
+    for v in played.episode.scorePermille():
+      total = total + v
+    c.check(total == 0,
+      $endRule & ": a stopped episode still ranks and still sums to zero")
+  else:
+    c.check(played.episode.reason == rsComplete,
+      $endRule & ": a natural ending is complete")
 
 # 33b -- the transport's `s:<tick>` is a TICK, on the axis the chrome draws.
 block:

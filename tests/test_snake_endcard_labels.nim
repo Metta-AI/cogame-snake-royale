@@ -47,17 +47,28 @@ for word in Forbidden:
   c.check(word notin core,
     "paintbot vocabulary in the renderer, outside comments: " & word)
 
+## Each re-mapped string is pinned by its EXACT number of occurrences, not by
+## `>= 1`: a second copy is how a rename half-lands (the markup relabelled and
+## the JS that overwrites it left behind, or the other way round). Where a
+## string legitimately appears twice -- once in the markup, once in the script
+## that rewrites it -- the count says so.
 const Replacements = [
-  "<span>Cog</span>", "<span>Place</span>", "<span>Turns</span>",
-  "<span>Length</span>", "<span>Ate</span>", "<span>Soft</span>",
-  "Coiling up", "Before the first move",
-  "showing recorded moves",
-  "deaths / head-ons / winner on the timeline ahead of the playhead (o)",
-  ">LENGTH<", "len-label", "hp-label"]
+  ("<span>Cog</span>", 1), ("<span>Place</span>", 1),
+  ("<span>Turns</span>", 1), ("<span>Length</span>", 1),
+  ("<span>Ate</span>", 1), ("<span>Soft</span>", 1),
+  ("Coiling up", 2),                  ## the markup and the locker-room script
+  ("Before the first move", 2),       ## the markup and renderClockLine
+  ("showing recorded moves", 2),      ## the markup and renderMismatch
+  ("deaths / head-ons / winner on the timeline ahead of the playhead (o)", 1),
+  (">LENGTH<", 1),
+  ("len-label", 5),                   ## the plate, the CSS and the .tiny rules
+  ("hp-label", 5)]
 
 let raw = readFile("client/replay_broadcast.html")
-for replacement in Replacements:
+for (replacement, want) in Replacements:
   let count = raw.count(replacement)
-  c.check(count >= 1, "the re-mapped string is present: " & replacement)
+  c.check(count == want,
+    "the re-mapped string " & replacement & " appears " & $count &
+    " times, expected " & $want)
 
 c.report()

@@ -16,9 +16,18 @@ type
 
 proc runScriptedEpisodeWith*(config: GameConfig,
                              kinds: array[Seats, Baseline],
-                             coil, forager: Tunables): ScriptedEpisode =
+                             coil, forager: Tunables,
+                             stopAfterTurn = 0,
+                             stopReason = rsComplete,
+                             stopEndRule = erFullTime): ScriptedEpisode =
   ## One episode, every seat scripted. Returns the settled episode, the replay
   ## the server would have written, and every event the turn loop emitted.
+  ##
+  ## `stopAfterTurn > 0` cuts the loop at that turn and settles with the given
+  ## reason -- the ABNORMAL endings the server's own loop takes when the wall
+  ## clock runs out or the sim faults. It writes the same `stop` record through
+  ## the same proc, so a test can RECORD a `wall_clock` or `sim_fault` episode
+  ## rather than appending a synthetic record to a healthy one.
   var episode = newEpisode(config)
   var replay = Replay(gameName: GameName, gameVersion: GameVersion)
   var events = episode.events
@@ -32,9 +41,18 @@ proc runScriptedEpisodeWith*(config: GameConfig,
       $kinds[slot], "scripted", $kinds[slot]))
   replay.configJson = replayConfigJson(episode)
 
-  var endRule = erFullTime
+  var
+    endRule = erFullTime
+    reason = rsComplete
+    stopped = false
   while episode.state.aliveCount() > 1 and
         episode.state.turn < config.maxTurns:
+    if stopAfterTurn > 0 and episode.state.turn >= stopAfterTurn:
+      endRule = stopEndRule
+      reason = stopReason
+      stopped = true
+      replay.chats.add(stopRecord(episode.state.turn, $endRule))
+      break
     var
       dirs: array[Seats, Dir]
       alts: array[Seats, tuple[has: bool, dir: Dir]]
@@ -55,17 +73,17 @@ proc runScriptedEpisodeWith*(config: GameConfig,
     turnEvents.add(auditDeclinedKills(episode.state, before, dirs))
     events.add(turnEvents)
     replay.turns.add(ReplayTurn(dirs: bytes, hash: episode.state.gameHash))
-  if episode.state.aliveCount() <= 1:
+  if not stopped and episode.state.aliveCount() <= 1:
     endRule = erLastStanding
   episode.turnsPlayed = episode.state.turn
   for slot in 0 ..< Seats:
     if episode.state.snakes[slot].alive:
       episode.state.snakes[slot].survivedTurns = episode.turnsPlayed
-  episode.settle(rsComplete, endRule)
+  episode.settle(reason, endRule)
   events.add(TurnEvent(kind: ekGameOver, turn: episode.turnsPlayed, slot: -1,
     other: -1, text: $endRule))
   events.add(TurnEvent(kind: ekEnd, turn: episode.turnsPlayed, slot: -1,
-    other: -1, text: $rsComplete))
+    other: -1, text: $reason))
   replay.chats.add(resultRecord(episode))
   ScriptedEpisode(episode: episode, replay: replay, events: events)
 

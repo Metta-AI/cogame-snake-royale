@@ -19,6 +19,19 @@ proc fallbackRecord*(turn, slot, attempt: int, cause, detail: string): string =
     "detail": detail.truncateRunes(MaxFallbackDetailRunes)
   })
 
+const UnregisteredSeatLog* = " never registered — playing coil"
+  ## The loud line the server prints for a seat that produced no `register`
+  ## record (the grf-football 2026-08-27 scar: a lost register packet silently
+  ## demoted a champion to the default script for a whole episode).
+
+proc playerFailureJson*(slot: int): string =
+  ## The CLOSED-SCHEMA player-failure payload, exactly two keys. One
+  ## implementation, so the payload the server POSTs to
+  ## COGAME_PLAYER_FAILURE_URI and the payload the test asserts about cannot
+  ## be two different documents.
+  $(%*{"message": "seat never registered; played the coil baseline",
+       "failed_policy_index": slot})
+
 proc registerRecord*(slot: int, alias, colour, policy, kind,
                      baseline: string): string =
   ## The REDACTED registration record. The seat's prompt is never written:

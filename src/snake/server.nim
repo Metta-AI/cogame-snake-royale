@@ -335,7 +335,7 @@ proc runEpisode*(host: string, port: int, config: GameConfig,
     withLock stateLock:
       reg = shared.registrations[slot]
     if not reg.seen:
-      echo "ERROR: seat ", slot, " never registered — playing coil"
+      echo "ERROR: seat ", slot, UnregisteredSeatLog
       episode.seats[slot].dead = true
       engine.seats[slot].isLlm = false
       engine.seats[slot].baseline = blCoil
@@ -471,8 +471,7 @@ proc runEpisode*(host: string, port: int, config: GameConfig,
       missing.add(slot)
   if missing.len > 0 and rt.failureUri.len > 0:
     writeCogameUri(rt.failureUri, "COGAME_PLAYER_FAILURE_URI",
-      $(%*{"message": "seat never registered; played the coil baseline",
-           "failed_policy_index": missing[0]}))
+      playerFailureJson(missing[0]))
 
   echo "snake-royale: episode ", $reason, " (", $endRule, ") after ",
     episode.turnsPlayed, " turns"

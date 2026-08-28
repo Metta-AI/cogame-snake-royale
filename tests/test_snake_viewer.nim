@@ -4,14 +4,79 @@
 import std/[os, sets, strutils]
 import helpers
 
-proc fnv1a64(text: string): uint64 =
-  ## A dependency-free content digest. std/sha1 moved out of the standard
-  ## library in Nim 2, and pinning a byte-for-byte copy must not depend on a
-  ## package that may or may not be synced.
-  result = 0xcbf29ce484222325'u64
-  for ch in text:
-    result = result xor uint64(ord(ch))
-    result = result * 0x100000001b3'u64
+const Sha256K: array[64, uint32] = [
+  0x428a2f98'u32, 0x71374491'u32, 0xb5c0fbcf'u32, 0xe9b5dba5'u32,
+  0x3956c25b'u32, 0x59f111f1'u32, 0x923f82a4'u32, 0xab1c5ed5'u32,
+  0xd807aa98'u32, 0x12835b01'u32, 0x243185be'u32, 0x550c7dc3'u32,
+  0x72be5d74'u32, 0x80deb1fe'u32, 0x9bdc06a7'u32, 0xc19bf174'u32,
+  0xe49b69c1'u32, 0xefbe4786'u32, 0x0fc19dc6'u32, 0x240ca1cc'u32,
+  0x2de92c6f'u32, 0x4a7484aa'u32, 0x5cb0a9dc'u32, 0x76f988da'u32,
+  0x983e5152'u32, 0xa831c66d'u32, 0xb00327c8'u32, 0xbf597fc7'u32,
+  0xc6e00bf3'u32, 0xd5a79147'u32, 0x06ca6351'u32, 0x14292967'u32,
+  0x27b70a85'u32, 0x2e1b2138'u32, 0x4d2c6dfc'u32, 0x53380d13'u32,
+  0x650a7354'u32, 0x766a0abb'u32, 0x81c2c92e'u32, 0x92722c85'u32,
+  0xa2bfe8a1'u32, 0xa81a664b'u32, 0xc24b8b70'u32, 0xc76c51a3'u32,
+  0xd192e819'u32, 0xd6990624'u32, 0xf40e3585'u32, 0x106aa070'u32,
+  0x19a4c116'u32, 0x1e376c08'u32, 0x2748774c'u32, 0x34b0bcb5'u32,
+  0x391c0cb3'u32, 0x4ed8aa4a'u32, 0x5b9cca4f'u32, 0x682e6ff3'u32,
+  0x748f82ee'u32, 0x78a5636f'u32, 0x84c87814'u32, 0x8cc70208'u32,
+  0x90befffa'u32, 0xa4506ceb'u32, 0xbef9a3f7'u32, 0xc67178f2'u32]
+
+proc rotr32(x: uint32, n: int): uint32 = (x shr n) or (x shl (32 - n))
+
+proc sha256Hex(data: string): string =
+  ## SHA-256, written out here on purpose. The design note pins the starter's
+  ## `chrome_common.js` by its SHA-256, and std/sha1 moved out of the standard
+  ## library in Nim 2: a byte-for-byte provenance pin must not depend on a
+  ## package that may or may not be synced, so the digest is computed rather
+  ## than imported. Cross-checked against `sha256sum` / python hashlib.
+  var h = [0x6a09e667'u32, 0xbb67ae85'u32, 0x3c6ef372'u32, 0xa54ff53a'u32,
+           0x510e527f'u32, 0x9b05688c'u32, 0x1f83d9ab'u32, 0x5be0cd19'u32]
+  var msg = data
+  let bits = uint64(data.len) * 8'u64
+  msg.add('\x80')
+  while msg.len mod 64 != 56:
+    msg.add('\0')
+  for i in countdown(7, 0):
+    msg.add(char((bits shr (8 * i)) and 0xFF'u64))
+  var at = 0
+  while at < msg.len:
+    var w: array[64, uint32]
+    for i in 0 ..< 16:
+      w[i] = (uint32(uint8(msg[at + i * 4])) shl 24) or
+             (uint32(uint8(msg[at + i * 4 + 1])) shl 16) or
+             (uint32(uint8(msg[at + i * 4 + 2])) shl 8) or
+              uint32(uint8(msg[at + i * 4 + 3]))
+    for i in 16 ..< 64:
+      let s0 = rotr32(w[i - 15], 7) xor rotr32(w[i - 15], 18) xor
+        (w[i - 15] shr 3)
+      let s1 = rotr32(w[i - 2], 17) xor rotr32(w[i - 2], 19) xor
+        (w[i - 2] shr 10)
+      w[i] = w[i - 16] + s0 + w[i - 7] + s1
+    var
+      a = h[0]
+      b = h[1]
+      c = h[2]
+      d = h[3]
+      e = h[4]
+      f = h[5]
+      g = h[6]
+      k = h[7]
+    for i in 0 ..< 64:
+      let s1 = rotr32(e, 6) xor rotr32(e, 11) xor rotr32(e, 25)
+      let ch = (e and f) xor ((not e) and g)
+      let t1 = k + s1 + ch + Sha256K[i] + w[i]
+      let s0 = rotr32(a, 2) xor rotr32(a, 13) xor rotr32(a, 22)
+      let maj = (a and b) xor (a and c) xor (b and c)
+      let t2 = s0 + maj
+      k = g; g = f; f = e; e = d + t1
+      d = c; c = b; b = a; a = t1 + t2
+    h[0] = h[0] + a; h[1] = h[1] + b; h[2] = h[2] + c; h[3] = h[3] + d
+    h[4] = h[4] + e; h[5] = h[5] + f; h[6] = h[6] + g; h[7] = h[7] + k
+    at = at + 64
+  result = ""
+  for v in h:
+    result.add(toHex(v, 8).toLowerAscii())
 
 var c = newChecker("test_snake_viewer")
 
@@ -27,9 +92,13 @@ block:
   c.check(chrome.len == 40022,
     "39: chrome_common.js is the starter's 40022 bytes (got " &
     $chrome.len & ")")
-  c.check(fnv1a64(chrome) == 0xd26e0d29ae78e8f6'u64,
-    "39: chrome_common.js digest matches the starter's (got 0x" &
-    toHex(fnv1a64(chrome)) & ")")
+  c.check(sha256Hex("abc") ==
+    "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    "39: (the digest function itself is the real SHA-256)")
+  c.check(sha256Hex(chrome) ==
+    "7ace7287e0d19bf0fddb2362c55e4d76dfb44adcd4fbc8d1743b0557ced72f7c",
+    "39: chrome_common.js sha256 matches the starter's (got " &
+    sha256Hex(chrome) & ")")
   for kept in ["markBeat", "renderBeatMarkers", "ingestBeats", "renderClock",
                "renderTransport", "ingestLullSpans", "renderMomentum"]:
     c.check(("function " & kept) in chrome, "39: " & kept & " survives")
@@ -63,6 +132,38 @@ block:
   c.check("pushFeed: pushFeed" in page, "40: including pushFeed")
   c.check("function pushFeed(row) {" in page,
     "40: pushFeed keeps the starter's one-argument signature")
+  ## The INHERITED HEAD -- everything above the banner -- is pinned by sha256
+  ## and by byte length. Provenance against coworld-ctf itself is reproduced
+  ## mechanically by scripts/build_replay_page.py (the starter is not in the
+  ## CI image, so it cannot be diffed here); this pin is what makes an
+  ## UNRECORDED edit to the inherited page fail the build. Move it only with
+  ## the design-note entry that explains the edit.
+  let head = page[0 ..< banner]
+  c.check(head.len == 84746,
+    "40: the inherited head is 84746 bytes (got " & $head.len & ")")
+  c.check(sha256Hex(head) ==
+    "5f36436b64a6982e132e0abb7cc616f5ae4d5a9ff8a00fd47db6b4009d2ef6dc",
+    "40: and its sha256 is pinned (got " & sha256Hex(head) & ")")
+  ## `pushFeed` by BODY, not by name: the cogball 0.1.4 latch scar was a
+  ## signature drift that threw mid-replay and latched static_replay.js into
+  ## `failed`, and a body that grows a second argument is the same bug.
+  let feedAt = page.find("  function pushFeed(row) {")
+  let feedEnd = page.find("\n  }\n", feedAt)
+  c.check(feedAt > 0 and feedEnd > feedAt, "40: pushFeed's body is findable")
+  let pushFeedBody = page[feedAt .. feedEnd + 4]
+  c.check(pushFeedBody.len == 691,
+    "40: pushFeed's body is the starter's 691 bytes (got " &
+    $pushFeedBody.len & ")")
+  c.check(sha256Hex(pushFeedBody) ==
+    "f57de7ceb58cc687a9a28537f4df549d940b102bf58cc60e0411eef4f184ee5f",
+    "40: byte-identical to the starter's (got " & sha256Hex(pushFeedBody) & ")")
+  ## The renderer's kept procs, by the same rule: the factory name, the
+  ## method surface the shell calls and the frame-packet ingest.
+  for kept in ["window.BroadcastCore", "function ingest(bytes)",
+               "setViewportSize:", "setViewportFit:", "getTransform:",
+               "getPaceStats:", "sendCommand:", "function syncCanvas()",
+               "function boardGeometry()", "function publishTransform(g)"]:
+    c.check(kept in core, "40: broadcast_core.js keeps " & kept)
 
 # 41 -- no shadowed chrome aliases.
 block:

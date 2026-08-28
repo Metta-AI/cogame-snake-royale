@@ -2,7 +2,7 @@
 ## stream, the bounded flood fill, the alliance audit, the scoring, the end
 ## conditions and the determinism greps (design note §Tests 1-18).
 
-import std/[os, strutils, times]
+import std/[json, os, strutils, times]
 import snake/[board, rules, space, sim, sim_types, sim_state, engine, baselines,
               replays, replay_runtime]
 
@@ -566,10 +566,53 @@ block:
         "15: scorePermille stays in range"
     check total == 0, "15: the four scores sum to EXACTLY zero"
     let place = episode.placements()
+    ## An INDEPENDENT ranking, written here from the design note's own three
+    ## keys, compared against the sim's: `results.win` is literally
+    ## `place == 1` in sim.nim, so comparing those two to each other proves
+    ## nothing. This compares the PLACES.
+    var wanted: array[Seats, int]
     for slot in 0 ..< Seats:
-      check (place[slot] == 1) == (permille[slot] ==
-        max(permille[0], max(permille[1], max(permille[2], permille[3]))) or
-        place[slot] == 1), "15: win is place == 1"
+      var above = 0
+      for other in 0 ..< Seats:
+        if other == slot:
+          continue
+        let
+          a = episode.state.snakes[other]
+          b = episode.state.snakes[slot]
+        let better =
+          if a.survivedTurns != b.survivedTurns:
+            a.survivedTurns > b.survivedTurns
+          elif a.finalLength != b.finalLength: a.finalLength > b.finalLength
+          else: a.foodEaten > b.foodEaten
+        if better:
+          inc above
+      wanted[slot] = above + 1
+    for slot in 0 ..< Seats:
+      check place[slot] == wanted[slot],
+        "15: place is the three-key ranking (seat " & $slot & ": " &
+        $place[slot] & " vs " & $wanted[slot] & ")"
+    ## A tied group really SHARES its place, and a better key really outranks.
+    for a in 0 ..< Seats:
+      for b in 0 ..< Seats:
+        let sa = episode.state.snakes[a]
+        let sb = episode.state.snakes[b]
+        if (sa.survivedTurns, sa.finalLength, sa.foodEaten) ==
+            (sb.survivedTurns, sb.finalLength, sb.foodEaten):
+          check place[a] == place[b], "15: an identical key shares a place"
+          check permille[a] == permille[b] or
+            abs(permille[a] - permille[b]) == 1,
+            "15: and splits its slice within one permille"
+        elif place[a] < place[b]:
+          check permille[a] >= permille[b],
+            "15: a better place never pays less"
+    ## win[s] == (place[s] == 1), read off the results document the league
+    ## reads, not off the same expression that produced it.
+    let results = parseJson(episode.snakeResultsJson())
+    for slot in 0 ..< Seats:
+      check results{"win"}[slot].getBool() == (wanted[slot] == 1),
+        "15: results.win is the independent place == 1"
+      check results{"place"}[slot].getInt() == wanted[slot],
+        "15: and results.place is the independent ranking"
 
 # 16. end conditions ---------------------------------------------------------
 block:
@@ -600,6 +643,46 @@ block:
   check fault.reason == rsFault and fault.endRule == erSimFault,
     "16: a fault reports itself"
   check fault.stopDetail == "boom", "16: stopDetail names it"
+
+  ## An all-four-die turn: nobody is left, so the episode ends
+  ## complete/last_standing and the placement falls entirely to the length
+  ## tie-break, because every seat survived the same number of turns.
+  var wipeout = newEpisode(config)
+  for slot in 0 ..< Seats:
+    ## Four snakes of four different lengths, each one step from a wall,
+    ## all four driven off the board on the same turn.
+    var body: seq[Cell]
+    for i in 0 ..< slot + 2:
+      body.add(cell(2 + slot * 3, i))
+    wipeout.state.snakes[slot] = Snake(alive: true, body: body, health: 30,
+      lastDir: dUp, killedBy: -1, deathCause: dcNone,
+      maxLength: body.len, finalLength: body.len)
+  wipeout.state.food = @[]
+  var out4: array[Seats, Dir]
+  for slot in 0 ..< Seats:
+    out4[slot] = dUp                     ## every head is on row 0
+  discard resolveTurn(wipeout.state, out4, noAlt())
+  check wipeout.state.aliveCount() == 0, "16: all four die on the same turn"
+  for slot in 0 ..< Seats:
+    check wipeout.state.snakes[slot].deathCause == dcWall,
+      "16: each of them into the wall"
+  wipeout.turnsPlayed = wipeout.state.turn
+  wipeout.settle(rsComplete, erLastStanding)
+  check wipeout.reason == rsComplete and wipeout.endRule == erLastStanding,
+    "16: an all-four-die turn still ends complete/last_standing"
+  let wipeoutPlaces = wipeout.placements()
+  for slot in 0 ..< Seats:
+    check wipeout.state.snakes[slot].survivedTurns ==
+      wipeout.state.snakes[0].survivedTurns,
+      "16: everybody survived the same number of turns"
+    ## Longer snakes placed higher, which is the length tie-break applied.
+    check wipeoutPlaces[slot] == Seats - slot,
+      "16: the length tie-break decides it (seat " & $slot & " placed " &
+      $wipeoutPlaces[slot] & ")"
+  var wipeoutTotal = 0
+  for v in wipeout.scorePermille():
+    wipeoutTotal = wipeoutTotal + v
+  check wipeoutTotal == 0, "16: and it still sums to exactly zero"
 
 # 17. no floats in hashed code -----------------------------------------------
 block:
@@ -633,5 +716,37 @@ block:
     check elapsed < 1.0,
       "18: a full 50-turn four-snake episode is under a second (" &
       $elapsed & "s)"
+
+  ## ...and NO SINGLE TURN exceeds 3 ms. The whole-episode bound above hides a
+  ## single pathological turn behind 49 fast ones, and it is the per-turn cost
+  ## that has to fit inside a turn.
+  var episode = newEpisode(config)
+  var worst = 0.0
+  var worstTurn = 0
+  var turns = 0
+  while episode.state.aliveCount() > 1 and
+        episode.state.turn < config.maxTurns:
+    var
+      dirs: array[Seats, Dir]
+      alts: array[Seats, tuple[has: bool, dir: Dir]]
+    for slot in 0 ..< Seats:
+      dirs[slot] =
+        if episode.state.snakes[slot].alive:
+          baselineDir(episode.state, slot, blCoil)
+        else: episode.state.snakes[slot].lastDir
+    let turnStarted = epochTime()
+    let before = episode.state
+    discard resolveTurn(episode.state, dirs, alts)
+    discard auditDeclinedKills(episode.state, before, dirs)
+    let cost = epochTime() - turnStarted
+    inc turns
+    if cost > worst:
+      worst = cost
+      worstTurn = episode.state.turn
+  check turns >= 10, "18: the timed episode really played (" & $turns & ")"
+  when defined(release):
+    check worst < 0.003,
+      "18: no single turn exceeds 3 ms (worst " & $(worst * 1000.0) &
+      " ms on turn " & $worstTurn & ")"
 
 report("test_snake_sim")
