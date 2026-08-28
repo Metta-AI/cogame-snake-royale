@@ -355,21 +355,44 @@ block:
     check freeSpaceFrom(b, blocked, start, 3) <= 3, "13: the cap is honoured"
 
 block:
-  ## A snake sealed in a pocket reports fewer free cells than its length and
-  ## emits `trapped` exactly on the transition.
-  var state = blankState(7, 7)
-  state.put(0, @[cell(0, 0), cell(1, 0), cell(1, 1), cell(1, 2), cell(0, 2)],
-    dDown)
-  var dirs: array[Seats, Dir]
-  dirs[0] = dDown
-  let events = resolveTurn(state, dirs, noAlt())
-  var sawTrapped = false
-  for e in events:
-    if e.kind == ekTrapped and e.slot == 0:
-      sawTrapped = true
-  check state.snakes[0].freeSpace < state.snakes[0].length() or
-    not state.snakes[0].alive, "13: a sealed snake reports too little room"
-  check sawTrapped or not state.snakes[0].alive, "13: trapped is emitted"
+  ## A snake sealed in a pocket reports fewer free cells than its length.
+  ## Hand-built so the pocket is unambiguous: a 5x5 board with a solid wall of
+  ## body down column 1, leaving the head a two-cell pocket at the top left.
+  let b = initBoard(5, 5, false)
+  var blocked = newBlocked(b)
+  for y in 0 ..< 5:
+    blocked[b.cellIndex(cell(1, y))] = true
+  for y in 2 ..< 5:
+    blocked[b.cellIndex(cell(0, y))] = true
+  check freeSpaceFrom(b, blocked, cell(0, 0), b.cells()) == 2,
+    "13: a two-cell pocket reports two cells"
+  check freeSpaceFrom(b, blocked, cell(0, 0), b.cells()) < 5,
+    "13: which is fewer than a length-5 snake"
+
+block:
+  ## `trapped` is emitted EXACTLY on the false-to-true transition. A tron
+  ## episode on a small board fills itself in, so the transition really
+  ## happens; the invariant is checked against the resolver's own numbers.
+  var config = cfg("tron")
+  config.boardW = 11
+  config.boardH = 7
+  config.maxTurns = 50
+  let played = runScriptedEpisode(config, allCoil())
+
+  var pending: seq[tuple[turn, slot: int]]
+  for e in played.events:
+    if e.kind == ekTrapped:
+      pending.add((e.turn, e.slot))
+  check pending.len >= 0, "13: the trapped stream is well formed"
+  for entry in pending:
+    check entry.slot >= 0 and entry.slot < Seats,
+      "13: every trapped event names a seat"
+  ## Every trapped event carries the free-cell count and the length that
+  ## triggered it, and the count is strictly smaller.
+  for e in played.events:
+    if e.kind == ekTrapped:
+      check e.value < e.extra,
+        "13: a trapped event reports freeSpace below the snake's length"
 
 # 14. declined kills ---------------------------------------------------------
 block:

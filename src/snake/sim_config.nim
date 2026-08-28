@@ -103,12 +103,14 @@ proc update*(config: var GameConfig, raw: string) =
   config.maxOutputTokens = max(1, node.getIntOr(
     "maxOutputTokens", config.maxOutputTokens))
 
-  if config.attempt1Ms < 1000 or config.retryMs < 1000:
+  if config.attempt1Ms < 1000 or config.retryMs < 1000 or
+      config.attempt1Ms mod 1000 != 0 or config.retryMs mod 1000 != 0:
     raise newException(SnakeError,
       "attempt1Ms and retryMs must be a WHOLE number of seconds and at " &
-      "least 1000 ms: curly hands the deadline to CURLOPT_TIMEOUT, whose " &
-      "granularity is whole seconds, so a sub-second value is not the " &
-      "deadline it claims to be")
+      "least 1000 ms (got " & $config.attempt1Ms & " and " &
+      $config.retryMs & "): curly hands the deadline to CURLOPT_TIMEOUT, " &
+      "whose granularity is whole seconds, so anything else is not the " &
+      "deadline it claims to be. 0.1.2 shipped 4500 and really ran with 4 s.")
   if config.turnBudgetMs < config.attempt1Ms:
     config.turnBudgetMs = config.attempt1Ms + config.retryMs
 

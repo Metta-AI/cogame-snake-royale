@@ -68,7 +68,7 @@ for kind in [blCoil, blForager]:
       c.check(not order.hasAlt, $kind & ": no alt is proposed")
       c.check(order.say.len == 0 and order.notes.len == 0,
         $kind & ": a baseline never says anything")
-      c.check($order.directiveRecord(1, slot, cogAlias(slot), "").len <= 1024,
+      c.check(($order.directiveRecord(1, slot, cogAlias(slot), "")).len <= 1024,
         $kind & ": the serialised directive is bounded")
       let neck = state.snakes[slot].neck()
       if neck.has:

@@ -13,13 +13,13 @@ proc stripComments(text: string): string =
   var kept = ""
   var i = 0
   while i < text.len:
-    if text.startsWith("<!--", i):
+    if text.continuesWith("<!--", i):
       let close = text.find("-->", i)
       i = if close < 0: text.len else: close + 3
-    elif text.startsWith("/*", i):
+    elif text.continuesWith("/*", i):
       let close = text.find("*/", i)
       i = if close < 0: text.len else: close + 2
-    elif text.startsWith("//", i) and (i == 0 or text[i - 1] notin {':', '/'}):
+    elif text.continuesWith("//", i) and (i == 0 or text[i - 1] notin {':', '/'}):
       let close = text.find('\n', i)
       i = if close < 0: text.len else: close
     else:

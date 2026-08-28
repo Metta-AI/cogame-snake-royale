@@ -12,7 +12,7 @@
 ## playback, so they cost no replay bytes and are identical live and in
 ## replay.
 
-import std/[json, strutils]
+import std/[json, tables]
 import board, rules, sim, sim_types, events, labels, replay_runtime
 
 proc cellsJson(cells: seq[Cell]): JsonNode =

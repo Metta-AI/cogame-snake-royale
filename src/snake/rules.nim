@@ -481,12 +481,15 @@ proc resolveTurn*(state: var GameState, dirs: array[Seats, Dir],
       if not b.inBounds(c):
         continue
       let index = b.cellIndex(c)
-      if i == 0 and not offBoard[slot]:
-        ## A head that MOVED this turn is not an obstacle: two heads in one
-        ## cell were already settled by step 9, and letting a corpse's head
-        ## block here would kill the head-on winner with the loser's neck --
-        ## the exact outcome the step ordering exists to prevent. A snake that
-        ## died against a WALL never moved, so its head stays an obstacle.
+      if i == 0 and not (dying[slot] and cause[slot] != dcHeadOn):
+        ## A LIVE head is not an obstacle to anybody: two live heads in one
+        ## cell were already settled by step 9. A snake killed in step 4, 8 or
+        ## 9 DOES still occupy the board here -- its corpse must not
+        ## retroactively free a cell another snake was already committed to --
+        ## with exactly one exception: the head cell of a head-on LOSER, which
+        ## the winner legitimately holds. Without that exception the winner
+        ## would die on the loser's corpse and `longer_wins` would mean
+        ## nothing, which is the outcome the step ordering exists to prevent.
         continue
       blocked[index] = true
       owner[index] = slot

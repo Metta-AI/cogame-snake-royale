@@ -58,11 +58,11 @@ c.check("REPAIRED" in Divergences[3].here, "divergence 4 is the neck repair")
 c.check("hazards" in Divergences[4].upstream, "divergence 5 is hazards")
 
 # docs/RULES.md carries the same five divergences.
-let rules = readFile("docs/RULES.md")
-c.check("Divergences from the upstreams" in rules,
+let rulesDoc = readFile("docs/RULES.md")
+c.check("Divergences from the upstreams" in rulesDoc,
   "docs/RULES.md has a divergences section")
 for needle in ["shrinks every 40", "health is 100", "starts at length 1",
                "repaired", "hazards are not implemented"]:
-  c.check(needle in rules, "docs/RULES.md mentions: " & needle)
+  c.check(needle in rulesDoc, "docs/RULES.md mentions: " & needle)
 
 c.report()

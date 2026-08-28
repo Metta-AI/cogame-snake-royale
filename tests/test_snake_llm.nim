@@ -41,7 +41,8 @@ block:
     long.add("x")
   let wrapped = operatorBlock(long)
   c.check("GUIDANCE FROM YOUR OPERATOR" in wrapped, "the operator heading")
-  c.check(wrapped.len < long.len, "and the prompt is truncated to the cap")
+  c.check(wrapped.count('x') == MaxPromptRunes,
+    "and the prompt is truncated to the cap (got " & $wrapped.count('x') & ")")
   c.check(operatorBlock("").len == 0, "an empty prompt adds nothing")
 
 # The cadence constants are the design note's.
