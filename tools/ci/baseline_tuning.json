@@ -6,23 +6,32 @@
       "geese",
       "tron"
     ],
-    "seedsPerModule": 8,
+    "seedsPerModule": 4,
     "seedStride": 977,
-    "seats": [
-      "coil",
-      "forager",
-      "coil",
-      "forager"
+    "seatings": [
+      [
+        "coil",
+        "forager",
+        "coil",
+        "forager"
+      ],
+      [
+        "forager",
+        "coil",
+        "forager",
+        "coil"
+      ]
     ],
-    "episodes": 24
+    "episodes": 24,
+    "why": "Each seed is played once per seating, so every baseline occupies each spawn anchor the same number of times. The four anchors are not equally good: on an unmirrored ladder two IDENTICAL players score 0.222 apart, and any margin read off it is mostly seat position."
   },
   "baselines": {
     "coil": {
       "spaceWeight": 100,
-      "spaceCap": 4,
+      "spaceCap": 2,
       "headRiskPenalty": 900,
       "killBonus": 120,
-      "foodWeight": 400,
+      "foodWeight": 100,
       "hungerThreshold": 12
     },
     "forager": {
@@ -35,33 +44,33 @@
     }
   },
   "measured": {
-    "comment": "Recorded from the swept pick. The two baselines really do play differently: coil weights space and eats only under its hunger threshold, forager beelines for food and accepts tighter room. Under this game's survival-first, then-length ranking that greed PAYS on the food boards, so the placement margin runs slightly in forager's favour overall while coil takes the geese board. These integers are the regression pin: any change to the rules, the scoring or either baseline moves them.",
     "total": {
-      "coilPermille": -2330,
-      "foragerPermille": 2330,
-      "coilTurns": 1646,
-      "foragerTurns": 1964
+      "coilPermille": 4332,
+      "foragerPermille": -4332,
+      "coilTurns": 1893,
+      "foragerTurns": 1982
     },
-    "margin": -0.09708333333333333,
+    "margin": 0.1805,
     "perModule": {
       "royale": {
-        "coilPermille": -2000,
-        "foragerPermille": 2000,
-        "coilTurns": 585,
-        "foragerTurns": 678
+        "coilPermille": 999,
+        "foragerPermille": -999,
+        "coilTurns": 689,
+        "foragerTurns": 716
       },
       "geese": {
-        "coilPermille": 1334,
-        "foragerPermille": -1334,
-        "coilTurns": 549,
-        "foragerTurns": 640
+        "coilPermille": 2666,
+        "foragerPermille": -2666,
+        "coilTurns": 680,
+        "foragerTurns": 670
       },
       "tron": {
-        "coilPermille": -1664,
-        "foragerPermille": 1664,
-        "coilTurns": 512,
-        "foragerTurns": 646
+        "coilPermille": 667,
+        "foragerPermille": -667,
+        "coilTurns": 524,
+        "foragerTurns": 596
       }
-    }
+    },
+    "comment": "Recorded from the swept pick on the seat-mirrored ladder, where an identical pair scores exactly 0.0. coil takes all three modules (royale +999, geese +2666, tron +667 permille) for an overall margin of +0.1805 mean score per seat. The design note's claimed [+0.30,+1.20] band is not reachable anywhere in the swept matrix -- the best candidate is this one. These integers are the regression pin: any change to the rules, the scoring or either baseline moves them."
   }
 }

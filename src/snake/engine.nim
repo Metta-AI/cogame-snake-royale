@@ -75,10 +75,15 @@ proc runScriptedEpisode*(config: GameConfig,
 
 type
   LadderTotals* = object
-    ## The recorded 24-episode ladder: eight seeds on each of the three rule
-    ## modules, seated coil, forager, coil, forager. One implementation, so
-    ## `tools/tune_baselines.nim` and `tests/test_snake_control.nim` can never
-    ## measure two different things.
+    ## The recorded 24-episode ladder: four seeds on each of the three rule
+    ## modules, each seed played TWICE with the two baselines swapped between
+    ## the seat pairs. The mirror is what makes the margin a measurement of
+    ## the POLICIES: seats 0/2 and seats 1/3 spawn on different anchors, and
+    ## on an unmirrored ladder two identical players still score -0.222 apart,
+    ## so any margin read off it is mostly seat position. Mirrored, an
+    ## identical pair scores exactly 0.0 by construction.
+    ## One implementation, so `tools/tune_baselines.nim` and
+    ## `tests/test_snake_control.nim` can never measure two different things.
     coilPermille*, foragerPermille*: int
     coilTurns*, foragerTurns*: int
     perModule*: array[3, tuple[coilPermille, foragerPermille,
@@ -86,7 +91,8 @@ type
 
 const
   LadderModules* = ["royale", "geese", "tron"]
-  LadderSeeds* = 8
+  LadderSeeds* = 4
+  LadderSeatings* = 2
   LadderSeedStride* = 977
 
 proc ladderConfig*(module: string, seed: int): GameConfig =
@@ -109,17 +115,23 @@ proc ladderConfig*(module: string, seed: int): GameConfig =
 proc ladderTotals*(coil, forager: Tunables): LadderTotals =
   for index, module in LadderModules:
     for seed in 1 .. LadderSeeds:
-      let played = runScriptedEpisodeWith(
-        ladderConfig(module, seed * LadderSeedStride),
-        [blCoil, blForager, blCoil, blForager], coil, forager)
-      let permille = played.episode.scorePermille()
-      let snakes = played.episode.state.snakes
-      result.perModule[index].coilPermille += permille[0] + permille[2]
-      result.perModule[index].foragerPermille += permille[1] + permille[3]
-      result.perModule[index].coilTurns +=
-        snakes[0].survivedTurns + snakes[2].survivedTurns
-      result.perModule[index].foragerTurns +=
-        snakes[1].survivedTurns + snakes[3].survivedTurns
+      let config = ladderConfig(module, seed * LadderSeedStride)
+      ## Seating A puts coil on seats 0/2; seating B swaps the pair. The same
+      ## board, the same food stream, both ways round.
+      for seating in 0 ..< LadderSeatings:
+        let kinds =
+          if seating == 0: [blCoil, blForager, blCoil, blForager]
+          else: [blForager, blCoil, blForager, blCoil]
+        let played = runScriptedEpisodeWith(config, kinds, coil, forager)
+        let permille = played.episode.scorePermille()
+        let snakes = played.episode.state.snakes
+        for slot in 0 ..< Seats:
+          if kinds[slot] == blCoil:
+            result.perModule[index].coilPermille += permille[slot]
+            result.perModule[index].coilTurns += snakes[slot].survivedTurns
+          else:
+            result.perModule[index].foragerPermille += permille[slot]
+            result.perModule[index].foragerTurns += snakes[slot].survivedTurns
     result.coilPermille += result.perModule[index].coilPermille
     result.foragerPermille += result.perModule[index].foragerPermille
     result.coilTurns += result.perModule[index].coilTurns
@@ -128,7 +140,7 @@ proc ladderTotals*(coil, forager: Tunables): LadderTotals =
 proc ladderMargin*(totals: LadderTotals): float =
   ## The mean score difference per seat, over the whole ladder.
   float(totals.coilPermille - totals.foragerPermille) /
-    float(LadderModules.len * LadderSeeds * 2 * 1000)
+    float(LadderModules.len * LadderSeeds * LadderSeatings * 2 * 1000)
 
 proc allCoil*(): array[Seats, Baseline] =
   for slot in 0 ..< Seats:

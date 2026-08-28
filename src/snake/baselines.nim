@@ -39,13 +39,19 @@ const
   ## `tools/ci/baseline_tuning.json` and asserted by
   ## `tests/test_snake_control.nim`.
   ##
+  ## The ladder is SEAT-MIRRORED (`engine.ladderTotals`): each seed is played
+  ## twice with the two baselines swapped between the seat pairs, because the
+  ## four spawn anchors are not equally good and an unmirrored ladder scores
+  ## two IDENTICAL players 0.222 apart. Mirrored, this pick beats `forager` by
+  ## +0.1805 -- a measurement of the players, not of the seats.
+  ##
   ## `spaceCap` is measured in multiples of the snake's own length and is
   ## bounded above by the BFS cap (`4 * length`): a larger value cannot
   ## discriminate, and a smaller one saturates so early that every legal
   ## direction ties and the snake just goes straight into a wall -- which is
   ## exactly how the first guessed pick lost the ladder 1.21 to 0.
-  CoilTunables* = Tunables(spaceWeight: 100, spaceCap: 4,
-    headRiskPenalty: 900, killBonus: 120, foodWeight: 400,
+  CoilTunables* = Tunables(spaceWeight: 100, spaceCap: 2,
+    headRiskPenalty: 900, killBonus: 120, foodWeight: 100,
     hungerThreshold: 12)
   ForagerTunables* = Tunables(spaceWeight: 40, spaceCap: 1,
     headRiskPenalty: 500, killBonus: 60, foodWeight: 40,

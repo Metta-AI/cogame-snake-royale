@@ -188,11 +188,12 @@ block:
     c.check(node{"hungerThreshold"}.getInt == want.hungerThreshold,
       name & " hungerThreshold")
 
-  ## The ladder is the regression pin. Eight seeds on each of the three rule
-  ## modules, seated coil, forager, coil, forager, measured through the SAME
-  ## `ladderTotals` proc `tools/tune_baselines.nim --check` uses -- so the
-  ## test and the sweep can never measure two different things. Any change to
-  ## the rules, to the scoring or to either baseline moves these integers.
+  ## The ladder is the regression pin. Four seeds on each of the three rule
+  ## modules, each played TWICE with the two baselines swapped between the
+  ## seat pairs -- 24 episodes -- measured through the SAME `ladderTotals`
+  ## proc `tools/tune_baselines.nim --check` uses, so the test and the sweep
+  ## can never measure two different things. Any change to the rules, to the
+  ## scoring or to either baseline moves these integers.
   let totals = ladderTotals(CoilTunables, ForagerTunables)
   let measured = tuning{"measured"}{"total"}
   echo "ladder: coilPermille=", totals.coilPermille,
@@ -214,18 +215,30 @@ block:
     c.check(totals.perModule[index].foragerPermille ==
       per{"foragerPermille"}.getInt(), module & ": forager score")
 
-  ## The two baselines must play DIFFERENTLY -- a filler that is a copy of the
-  ## other filler tells a champion nothing. The scores are zero-sum per
-  ## episode, so a materially non-zero margin is what separation looks like.
+  ## The seat mirror is what makes the margin a measurement of the PLAYERS:
+  ## the four spawn anchors are not equally good, so two identical players
+  ## must score exactly 0.0 on this ladder. They do -- and coil, the cert
+  ## player, the per-turn fallback and the default for an unregistered seat,
+  ## beats forager on it.
+  let mirrorControl = ladderTotals(ForagerTunables, ForagerTunables)
+  c.check(ladderMargin(mirrorControl) == 0.0,
+    "the ladder is seat-balanced: an identical pair scores exactly 0 (got " &
+    $ladderMargin(mirrorControl) & ")")
   let margin = ladderMargin(totals)
+  c.check(margin > 0.0,
+    "coil out-scores forager over the recorded ladder (margin " &
+    $margin & ")")
+  ## The two baselines must also play DIFFERENTLY -- a filler that is a copy
+  ## of the other filler tells a champion nothing. The scores are zero-sum per
+  ## episode, so a materially non-zero margin is what separation looks like.
   c.check(abs(margin) >= 0.05,
     "coil and forager are materially different players (margin " &
     $margin & ")")
   c.check(totals.coilPermille + totals.foragerPermille == 0,
     "and every ladder episode is exactly zero sum")
-  ## coil takes the board with no food to race for and a hunger clock that
-  ## punishes greed; forager takes the boards where growing pays.
-  c.check(totals.perModule[1].coilPermille > 0,
-    "coil wins the geese ladder, where the hunger clock punishes greed")
+  ## And it is not one lucky module: coil takes all three.
+  for index, module in LadderModules:
+    c.check(totals.perModule[index].coilPermille > 0,
+      "coil wins the " & module & " ladder")
 
 c.report()
