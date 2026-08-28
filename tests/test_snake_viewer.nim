@@ -157,4 +157,38 @@ block:
   c.check("SNAKE_WIRE" in core, "and reads window.SNAKE_WIRE")
   c.check("CTF_WIRE" notin core, "the CTF_WIRE name is gone")
 
+# 48 -- the renderer fixture really drives the readouts it claims to cover.
+block:
+  ## The bundle draws in a Worker on an OffscreenCanvas, where
+  ## viewer_smoke.mjs's main-thread canvas patch cannot see a single
+  ## `fillText`: the fixture is the ONLY text-bounds coverage, so what it
+  ## drives is load-bearing. It used to hand the chrome `roster: []`,
+  ## `beats: []`, `lead.pts: []` and `duel: -1`, which exercised none of the
+  ## scorebug, the beat markers, the ribbon or the duel banner.
+  let fixture = readFile("tools/ci/renderer_fixture.html")
+  let workflow = readFile(".github/workflows/ci.yml")
+  c.check("window.SNAKE_DRIVE_FRAME = onFrame;" in page,
+    "48: the page publishes its frame path for the fixture")
+  c.check("win.SNAKE_DRIVE_FRAME" in fixture,
+    "48: and the fixture drives the page's own frame path")
+  for driven in ["roster: roster(seats)", "beats: beats()", "pts: leadPts()",
+                 "duel: DUEL", "results: over ? results() : null"]:
+    c.check(driven in fixture,
+      "48: the fixture drives real chrome data (" & driven & ")")
+  for kind in ["'eat'", "'trapped'", "'headon'", "'fallback'", "'death'",
+               "'duel'", "'gameover'"]:
+    c.check("k: " & kind in fixture,
+      "48: and a beat of every emitted kind (" & kind & ")")
+  for asserted in ["plates, not 4", "beat markers, not",
+                   "the length ribbon drew nothing",
+                   "the match feed drew no rows",
+                   "the duel banner never fired",
+                   "the endcard stayed up after a seek"]:
+    c.check(asserted in fixture,
+      "48: and fails the step when a readout is missing (" & asserted & ")")
+  c.check("fixture/viewer-smoke.json" in workflow,
+    "48: and ci.yml uploads the fixture's own evidence, not just the log line")
+  c.check("--strict-text-bounds" in workflow,
+    "48: with the text-bounds gate on")
+
 c.report()

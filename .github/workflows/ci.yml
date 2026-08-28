@@ -318,14 +318,18 @@ jobs:
           test -n "${replay}" || {
             echo "::error::docker-smoke uploaded no replay to dist/smoke"; ls -la dist/smoke || true; exit 1; }
           echo "loading ${replay} in dist/static-replay-viewer"
-          # --strict-text-bounds fails the job if the viewer drew any text
-          # outside its canvas -- a bubble, caption or nameplate with nowhere
-          # to go, invisible to the load signal and to the screenshot
-          # (cogchemists 2026-08-24: four speech bubbles drawn at a negative y
-          # and clipped to slivers). Keep it for a FIXED arena, which is every
-          # coworld whose whole board fits the frame. DROP THIS FLAG ONLY if
-          # the board is pannable, where drawing off-frame is normal -- the
-          # count is still reported on stdout and in viewer-smoke.json.
+          # --strict-text-bounds is carried here too, but READ WHAT IT COVERS:
+          # this bundle draws in a WORKER on an OffscreenCanvas
+          # (static_replay.js: canvas.transferControlToOffscreen()), and
+          # viewer_smoke.mjs patches CanvasRenderingContext2D in the PAGE, so
+          # `canvas_text` is reported as total 0 here BY CONSTRUCTION -- "the
+          # check covered nothing", not "nothing was wrong". The gate that
+          # measures drawn strings is the renderer-fixture step below, which
+          # loads the same shipped broadcast_core.js on a MAIN-THREAD canvas.
+          # THIS step is the gate on: the bundle loading at all
+          # (data-replay-loaded), playback advancing (--soak 10) and the
+          # scrubber seeking (the 0 %/50 %/100 % clock readouts in
+          # viewer-smoke.json).
           # --soak 10: uninterrupted playback must keep advancing. A 40-turn
           # certification replay plays for 20 s at 12 render frames per turn,
           # so the soak observes real advancement rather than a legitimately
@@ -338,13 +342,28 @@ jobs:
             --strict-text-bounds
 
       - name: Drive the worst-case text chrome (renderer fixture)
-        # docker_smoke.sh runs with NO ANTHROPIC_API_KEY, so every seat in the
-        # CI replay plays scripted and a scripted baseline emits no `say` at
-        # all: the smoke replay can never exercise the say bubble or the feed's
-        # say path (the cogchemists 2026-08-24 scar). This fixture loads the
-        # SHIPPED dist/static-replay-viewer/index.html in an iframe and shims
-        # only the wasm entry, so it drives the real page rather than a
-        # re-implementation of it (the particle-worlds 2026-08-26 scar).
+        # THE TEXT-BOUNDS GATE. docker_smoke.sh runs with NO ANTHROPIC_API_KEY,
+        # so every seat in the CI replay plays scripted and a scripted baseline
+        # emits no `say` at all: the smoke replay can never exercise the say
+        # bubble or the feed's say path (the cogchemists 2026-08-24 scar). And
+        # the bundle step above draws in a Worker, where the harness's
+        # main-thread canvas patch cannot see a single fillText.
+        #
+        # This fixture closes both gaps. It loads the SHIPPED
+        # dist/static-replay-viewer/broadcast_core.js -- the same file the
+        # Worker imports, not a re-implementation of it (the particle-worlds
+        # 2026-08-26 scar) -- on a MAIN-THREAD canvas at 360/640/1024 px on all
+        # three board shapes, with a full-cap 24-rune `say` on all four seats
+        # including one on the top row, so --strict-text-bounds measures real
+        # draws: the step log prints the `canvas text: N drawn, 0 never
+        # inside` line and fails the job on a regression.
+        # It ALSO mounts the shipped index.html in an iframe and drives the
+        # page's own frame path with a real roster, a real beat list, a real
+        # length series, a real duel turn, a full-cap say feed row and a real
+        # results document, so the scorebug plates, the seven beat markers,
+        # the length ribbon, the duel banner, the feed and the endcard (design
+        # §Tests 48) are exercised -- including that a seek back into the match
+        # takes the endcard down.
         run: |
           set -euo pipefail
           cp tools/ci/renderer_fixture.html dist/static-replay-viewer/renderer_fixture.html
@@ -363,7 +382,11 @@ jobs:
             --strict-text-bounds
 
       - name: Upload the viewer smoke evidence
-        # Always: the screenshot and the JSON are most useful when the job is red.
+        # Always: the screenshot and the JSON are most useful when the job is
+        # red. BOTH runs are uploaded -- the bundle's (root) and the renderer
+        # fixture's (fixture/) -- because the fixture's canvas_text line is the
+        # only evidence about drawn strings and it must not live in the job log
+        # alone.
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -371,6 +394,8 @@ jobs:
           path: |
             viewer-smoke.png
             viewer-smoke.json
+            fixture/viewer-smoke.png
+            fixture/viewer-smoke.json
           if-no-files-found: warn
           retention-days: 14
 

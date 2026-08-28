@@ -1551,6 +1551,14 @@ body[data-embed] #board { top: 0; height: 100%; }
     seekToFraction: seekToFraction,
     getState: function () { return lastState; }
   };
+  // Published for tools/ci/renderer_fixture.html. docker_smoke.sh runs with no
+  // ANTHROPIC_API_KEY, so no replay CI can produce carries a single `say`: the
+  // fixture is the only thing that ever drives the bubble, the beat markers,
+  // the length ribbon, the duel banner, the feed's say row and the endcard --
+  // and it must drive them through THIS page's own frame path (its feed queue,
+  // its banner queue, its chrome_common instance) rather than a copy of it.
+  window.SNAKE_DRIVE_FRAME = onFrame;
+  window.SNAKE_PB_CTX = PB_CTX;
   if (window.SnakeChrome) window.SnakeChrome.install(PB_CTX);
 
   relayout();
