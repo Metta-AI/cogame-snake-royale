@@ -37,6 +37,29 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------
+  # A GameVersion is claimed across BRANCHES and nothing else in the build
+  # enforces that: two branches can each be current with main and still pick
+  # the same next number, because neither can see the other's choice. The
+  # collision lands silently and an old replay then re-simulates WRONG while
+  # still loading, which is worse than a refusal.
+  # tools/ci/check_gameversion.sh (coworld-ctf's, one path edit) compares the
+  # RULE HEADLINE the number is attached to, not the number. Seconds, and
+  # isolated from the shards.
+  # ---------------------------------------------------------------------
+  gameversion-tripwire:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: GameVersion is not a number the base already spent
+        run: |
+          set -euo pipefail
+          test -x tools/ci/check_gameversion.sh || {
+            echo "::error::tools/ci/check_gameversion.sh must be executable"; exit 1; }
+          git fetch --no-tags --depth=1 origin '${{ github.base_ref }}'
+          tools/ci/check_gameversion.sh FETCH_HEAD
+
+  # ---------------------------------------------------------------------
   # Native Nim tests. Same nimby recipe as the Dockerfile build stage, so a
   # green test job means the image's compiler and package tree agree.
   # ---------------------------------------------------------------------
@@ -158,6 +181,45 @@ jobs:
             done
           done
           exit "${fail}"
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Validate the manifest under the installed coworld CLI
+        # Design note §Tests 38. The Nim test asserts the manifest's own pins;
+        # this asserts the PLATFORM's reading of it, through the same two
+        # functions `coworld build` calls -- _load_template_manifest, which
+        # substitutes the compose image placeholder and then runs
+        # validate_upload_manifest. 0.1.42+ wants game.replay_viewer, no
+        # top-level version, no game.display_name, game.owner present and no
+        # runner-managed tokens in a game_config (the collab-cooking
+        # 2026-08-25 scar), and every one of those is a model error here
+        # rather than a rejected upload three phases later.
+        run: |
+          set -euo pipefail
+          uv run --no-project --with "coworld==0.1.43" python - <<'PY'
+          import json
+          from coworld.bundle import _load_template_manifest
+
+          document = json.load(open("coworld_manifest_template.json"))
+          runtime = _load_template_manifest(
+              document, "0.1.0",
+              {"{{SNAKE_ROYALE_IMAGE}}": "coworld-snake-royale:ci"})
+          assert runtime.game.name == "snake-royale", runtime.game.name
+          assert runtime.game.replay_viewer.bundle == "static-replay-viewer", \
+              runtime.game.replay_viewer
+          assert [v.id for v in runtime.variants] == ["royale", "geese", "tron"]
+          assert len(runtime.certification.players) == 4
+          assert runtime.game.runnable.image == "coworld-snake-royale:ci"
+          print("manifest validates under coworld 0.1.43:",
+                runtime.game.name, runtime.game.version,
+                [v.id for v in runtime.variants])
+          PY
+
+      - name: The release version picker's own self-test
+        # tools/ci/next_coworld_version.py is what the release workflow uses to
+        # pick the next publish number past an orphan row; its self-test is the
+        # starter's and runs here so a stdlib-only helper cannot rot unnoticed.
+        run: python3 tools/ci/test_next_coworld_version.py
 
   # ---------------------------------------------------------------------
   # Packaging smoke: the production image builds, and one real episode runs

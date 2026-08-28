@@ -10,10 +10,14 @@
 import std/strutils
 
 const
-  GameVersion* = "1"
+  GameVersion* = "1"    ## the initial snake-royale rules
     ## Bumped whenever the recorded replay stream changes meaning. Every
     ## committed fixture carries it and `tests/test_snake_replay.nim` sweeps
-    ## for a stale one.
+    ## for a stale one. The HEADLINE on the declaration line is what
+    ## `tools/ci/check_gameversion.sh` compares across branches: two branches
+    ## can pick the same next number without seeing each other, and the same
+    ## number attached to two different rules is the collision that makes an
+    ## old replay re-simulate wrong.
 
   ReplayFps* = 24
     ## The VIEWER's render rate. A tick is not a turn here: the sim's atom is
