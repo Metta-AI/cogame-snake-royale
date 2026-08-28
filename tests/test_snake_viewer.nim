@@ -137,12 +137,16 @@ block:
   ## mechanically by scripts/build_replay_page.py (the starter is not in the
   ## CI image, so it cannot be diffed here); this pin is what makes an
   ## UNRECORDED edit to the inherited page fail the build. Move it only with
-  ## the design-note entry that explains the edit.
+  ## the note that explains the edit. Two harness edits are recorded against
+  ## it: `window.SNAKE_DRIVE_FRAME = onFrame` beside the install hook, which is
+  ## how tools/ci/renderer_fixture.html drives the real page, and
+  ## `class="feed"` on #killfeed, which is how viewer_smoke.mjs's readout finds
+  ## the match feed at all.
   let head = page[0 ..< banner]
-  c.check(head.len == 84746,
-    "40: the inherited head is 84746 bytes (got " & $head.len & ")")
+  c.check(head.len == 85330,
+    "40: the inherited head is 85330 bytes (got " & $head.len & ")")
   c.check(sha256Hex(head) ==
-    "5f36436b64a6982e132e0abb7cc616f5ae4d5a9ff8a00fd47db6b4009d2ef6dc",
+    "4ea9d19fad0074030977600de1ef17a2e470806c30fc10beace9221fd9e99a68",
     "40: and its sha256 is pinned (got " & sha256Hex(head) & ")")
   ## `pushFeed` by BODY, not by name: the cogball 0.1.4 latch scar was a
   ## signature drift that threw mid-replay and latched static_replay.js into
@@ -253,6 +257,14 @@ block:
     c.check(gone notin body, "43: " & gone & " is gone")
   c.check("attachMinimap(" notin body,
     "43: and nothing calls attachMinimap")
+  ## The match feed is findable by the shared harness, which reads
+  ## `#feed, .feed, #log` -- the starter's id alone matched none of them, so
+  ## viewer-smoke.json's `feed_lines` was 0 on every run whether or not a row
+  ## had been drawn.
+  c.check("<div id=\"killfeed\" class=\"feed\">" in page,
+    "43: the match feed carries the class viewer_smoke.mjs reads it by")
+  c.check(".feed {" notin page,
+    "43: and that class is not a style, so nothing renders differently")
   ## #viewpanel is dropped ENTIRELY, not hidden: the residual no-op stubs and
   ## the shell's minimap transfer are gone too. A method that exists and does
   ## nothing is indistinguishable from one that works.

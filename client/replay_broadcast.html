@@ -1007,7 +1007,15 @@ body[data-embed] #board { top: 0; height: 100%; }
     
     
     <div id="bannerlane"></div>
-    <div id="killfeed"></div>
+    <!-- class="feed" is not styling: tools/ci/viewer_smoke.mjs (the shared
+         template, copied verbatim, never edited per repo) reads the match
+         feed through `document.querySelector("#feed, .feed, #log")`. This
+         game inherited the starter's `#killfeed` id, which matches none of
+         those, so `feed_lines` in viewer-smoke.json was 0 on every run
+         whether or not a single row had been drawn -- a number that covered
+         nothing. The class makes it real evidence. No CSS rule selects
+         `.feed`; the rows are `.feed-row`. -->
+    <div id="killfeed" class="feed"></div>
 
     <div id="transport">
       <!-- Buttons on top, scrubber/timeline below (the transport sits in its own
