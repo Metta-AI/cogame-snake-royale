@@ -48,6 +48,24 @@ proc truncateRunes*(text: string, limit: int): string =
     return text
   text.runeSubStr(0, limit)
 
+proc boundedReply*(text: string): string =
+  ## THE 4096-byte read cap (design §Reply schema: "The whole reply is read
+  ## with a 4096-byte cap and the JSON is extracted by the tolerant
+  ## extractJsonObject"). `max_tokens` bounds a well-behaved provider, but the
+  ## cap is what bounds a misbehaving one, and `extractJsonObject` walks the
+  ## whole string: an unbounded reply is an unbounded scan on the turn's own
+  ## deadline.
+  ##
+  ## The cut lands on a RUNE boundary like every other cut in this file: it
+  ## backs off any UTF-8 continuation bytes, so the capped text is still valid
+  ## UTF-8 and a `say` sliced out of it can never carry half a codepoint.
+  if text.len <= MaxReplyBytes:
+    return text
+  var cut = MaxReplyBytes
+  while cut > 0 and (uint8(text[cut]) and 0b1100_0000'u8) == 0b1000_0000'u8:
+    dec cut
+  text[0 ..< cut]
+
 proc sanitizeSay*(text: string): string =
   ## The public one-line channel: capped at MaxSayRunes on a rune boundary
   ## FIRST, then run through the starter's printable-ASCII shout sanitiser.

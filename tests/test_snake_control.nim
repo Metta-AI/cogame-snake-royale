@@ -164,6 +164,38 @@ block:
   c.check(sanitizeSay("{control}").find('{') < 0,
     "a shout can never start with a brace")
   c.check(MaxReplyBytes == 4096, "the reply read is capped at 4096 bytes")
+  ## ...and the cap is APPLIED, not merely declared. A reply that buries its
+  ## JSON past the cap is cut, and one that puts it inside the cap survives.
+  block:
+    var prose = ""
+    for _ in 0 ..< MaxReplyBytes:
+      prose.add("x")
+    let buried = prose & """{"dir":"up"}"""
+    c.check(buried.len > MaxReplyBytes, "the sample really exceeds the cap")
+    c.check(boundedReply(buried).len == MaxReplyBytes,
+      "a reply longer than the cap is cut to it")
+    var raised = false
+    try:
+      discard extractJsonObject(boundedReply(buried))
+    except DirectiveError:
+      raised = true
+    c.check(raised, "so JSON buried past the cap is not read at all")
+    let inside = """{"dir":"up"}""" & prose
+    c.check(extractJsonObject(boundedReply(inside)){"dir"}.getStr() == "up",
+      "and a reply whose object is inside the cap still parses")
+    ## The cut lands on a rune boundary: a 4-byte emoji straddling byte 4096
+    ## must not be sliced in half.
+    var straddle = ""
+    for _ in 0 ..< MaxReplyBytes - 2:
+      straddle.add("y")
+    for _ in 0 ..< 8:
+      straddle.add("\u{1F600}")
+    let cut = boundedReply(straddle)
+    c.check(cut.len <= MaxReplyBytes, "the cut never exceeds the cap")
+    c.check(cut.validateUtf8() == -1,
+      "and it is still valid UTF-8 (cut at " & $cut.len & " bytes)")
+    c.check(readFile("src/snake/decide.nim").contains("boundedReply("),
+      "and the decision path reads every reply through it")
 
 # Tolerant JSON extraction: markdown fences and prose survive.
 block:

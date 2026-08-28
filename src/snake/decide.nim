@@ -286,9 +286,11 @@ proc turn*(engine: var DecisionEngine, episode: var Episode,
     for position, slot in open:
       var cause = "parse_error"
       try:
-        let text = engine.client.textOf(
+        ## The whole reply is READ with the 4096-byte cap before the
+        ## tolerant extraction walks it (design §Reply schema).
+        let text = boundedReply(engine.client.textOf(
           responses[position].response, responses[position].error,
-          batch[position].url)
+          batch[position].url))
         var order = parseSnakeOrder(extractJsonObject(text),
           episode.state.snakes[slot].lastDir, episode.legalMask(slot))
         order.source = dsLlm
