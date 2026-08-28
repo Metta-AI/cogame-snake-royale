@@ -242,10 +242,10 @@ proc websocketHandler(socket: WebSocket, event: WebSocketEvent,
       ## them itself; the platform's certifier pings `/global` to check the
       ## game is alive, so an unanswered ping fails certification with
       ## `game_contract_violation`.
+      ## Registration frames arrive as BinaryMessage (see
+      ## `src/snake_royale_player.nim`), so only Ping is filtered out here.
       if message.kind == Ping:
         socket.send(message.data, Pong)
-        return
-      if message.kind != TextMessage:
         return
       if slot >= 0 and message.data.len > 0:
         applyRegistration(slot, message.data)
