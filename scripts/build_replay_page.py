@@ -1,17 +1,28 @@
 #!/usr/bin/env python3
-"""Build client/replay_broadcast.html from the coworld-ctf starter's page.
+"""Re-derive the INHERITED head of client/replay_broadcast.html from the
+coworld-ctf starter's page, so the inheritance can be diffed rather than
+taken on trust.
 
 The rule (coworld-builder playbooks/make-coworld.md, design note §Viewer ->
 Chrome provenance): the page is the STARTER'S page with a game block appended,
-never a rewrite that reuses its ids. This script is the audit trail for that:
-it takes the starter's bytes, deletes exactly the elements and CSS rules the
-design note lists as removed, applies the enumerated label re-mappings, and
-then appends the SNAKE-ROYALE block.
+never a rewrite that reuses its ids. This script is the audit trail for that.
+It takes the starter's bytes, deletes exactly the elements and CSS rules the
+design note lists as removed, and applies the enumerated label re-mappings.
 
-Run:  python3 scripts/build_replay_page.py /path/to/coworld-ctf
+It does NOT write client/replay_broadcast.html: that file is committed, it
+carries the appended SNAKE-ROYALE block, and CI never regenerates it. What
+this writes is the mechanically-derived head plus the starter chunks the block
+was spliced around, into a SCRATCH directory, for a reviewer to diff:
 
-The output is committed; CI does not regenerate it. The script exists so a
-reviewer can diff the inheritance rather than take it on trust.
+  python3 scripts/build_replay_page.py [starter-root] [out-dir]
+    -> <out>/_head_markup.html          the derived inherited head
+    -> <out>/_chunk_<name>.js           the starter chunks, by name
+
+  diff <(head -c "$(wc -c < <out>/_head_markup.html)" \
+           client/replay_broadcast.html) <out>/_head_markup.html
+
+Defaults: starter-root /workspace/starters/coworld-ctf, out-dir
+dist/replay-page-provenance. Nothing is written under client/.
 """
 
 import re
@@ -131,6 +142,9 @@ def lines(text, first, last):
 
 def main():
     starter_root = sys.argv[1] if len(sys.argv) > 1 else "/workspace/starters/coworld-ctf"
+    out_dir = (sys.argv[2] if len(sys.argv) > 2
+               else os.path.join(ROOT, "dist", "replay-page-provenance"))
+    os.makedirs(out_dir, exist_ok=True)
     src = open(os.path.join(starter_root, "client",
                             "replay_broadcast.html")).read()
 
@@ -156,10 +170,14 @@ def main():
         "relayout": lines(src, 4270, 4324),
     }
     for name, text in chunks.items():
-        open(os.path.join(ROOT, "client", "_chunk_%s.js" % name), "w").write(text)
+        open(os.path.join(out_dir, "_chunk_%s.js" % name), "w").write(text)
 
-    open(os.path.join(ROOT, "client", "_head_markup.html"), "w").write(head_markup)
-    print("wrote _head_markup.html and %d starter chunks" % len(chunks))
+    head_path = os.path.join(out_dir, "_head_markup.html")
+    open(head_path, "w").write(head_markup)
+    print("wrote %s and %d starter chunks" % (head_path, len(chunks)))
+    print("diff the inheritance with:")
+    print("  diff <(head -c %d client/replay_broadcast.html) %s"
+          % (len(head_markup), head_path))
 
 
 if __name__ == "__main__":
