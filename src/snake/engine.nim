@@ -73,6 +73,63 @@ proc runScriptedEpisode*(config: GameConfig,
                          kinds: array[Seats, Baseline]): ScriptedEpisode =
   runScriptedEpisodeWith(config, kinds, CoilTunables, ForagerTunables)
 
+type
+  LadderTotals* = object
+    ## The recorded 24-episode ladder: eight seeds on each of the three rule
+    ## modules, seated coil, forager, coil, forager. One implementation, so
+    ## `tools/tune_baselines.nim` and `tests/test_snake_control.nim` can never
+    ## measure two different things.
+    coilPermille*, foragerPermille*: int
+    coilTurns*, foragerTurns*: int
+    perModule*: array[3, tuple[coilPermille, foragerPermille,
+                               coilTurns, foragerTurns: int]]
+
+const
+  LadderModules* = ["royale", "geese", "tron"]
+  LadderSeeds* = 8
+  LadderSeedStride* = 977
+
+proc ladderConfig*(module: string, seed: int): GameConfig =
+  result = defaultGameConfig()
+  result.module = module
+  let preset = ruleModule(module)
+  result.boardW = preset.board.w
+  result.boardH = preset.board.h
+  result.wrap = preset.board.wrap
+  result.foodCount = preset.foodCount
+  result.healthStart = preset.healthStart
+  result.shrinkEvery = preset.shrinkEvery
+  result.leaveTrail = preset.leaveTrail
+  result.headToHead = $preset.headToHead
+  result.startLength = preset.startLength
+  result.maxTurns = preset.maxTurns
+  result.seed = seed
+  result.turnSpacingMs = 0
+
+proc ladderTotals*(coil, forager: Tunables): LadderTotals =
+  for index, module in LadderModules:
+    for seed in 1 .. LadderSeeds:
+      let played = runScriptedEpisodeWith(
+        ladderConfig(module, seed * LadderSeedStride),
+        [blCoil, blForager, blCoil, blForager], coil, forager)
+      let permille = played.episode.scorePermille()
+      let snakes = played.episode.state.snakes
+      result.perModule[index].coilPermille += permille[0] + permille[2]
+      result.perModule[index].foragerPermille += permille[1] + permille[3]
+      result.perModule[index].coilTurns +=
+        snakes[0].survivedTurns + snakes[2].survivedTurns
+      result.perModule[index].foragerTurns +=
+        snakes[1].survivedTurns + snakes[3].survivedTurns
+    result.coilPermille += result.perModule[index].coilPermille
+    result.foragerPermille += result.perModule[index].foragerPermille
+    result.coilTurns += result.perModule[index].coilTurns
+    result.foragerTurns += result.perModule[index].foragerTurns
+
+proc ladderMargin*(totals: LadderTotals): float =
+  ## The mean score difference per seat, over the whole ladder.
+  float(totals.coilPermille - totals.foragerPermille) /
+    float(LadderModules.len * LadderSeeds * 2 * 1000)
+
 proc allCoil*(): array[Seats, Baseline] =
   for slot in 0 ..< Seats:
     result[slot] = blCoil

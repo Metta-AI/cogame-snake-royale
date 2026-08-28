@@ -45,7 +45,8 @@ const
   ## direction ties and the snake just goes straight into a wall -- which is
   ## exactly how the first guessed pick lost the ladder 1.21 to 0.
   CoilTunables* = Tunables(spaceWeight: 100, spaceCap: 4,
-    headRiskPenalty: 900, killBonus: 120, foodWeight: 8, hungerThreshold: 12)
+    headRiskPenalty: 900, killBonus: 120, foodWeight: 400,
+    hungerThreshold: 12)
   ForagerTunables* = Tunables(spaceWeight: 40, spaceCap: 1,
     headRiskPenalty: 500, killBonus: 60, foodWeight: 40,
     hungerThreshold: 999)

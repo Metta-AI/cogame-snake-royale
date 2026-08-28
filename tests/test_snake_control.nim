@@ -1,7 +1,7 @@
 ## Bounded, legal orders on the scripted baselines; the fallback path is the
 ## coil proc; the reply validator repairs rather than rejects.
 
-import std/[json, strutils, unicode]
+import std/[json, math, strutils, unicode]
 import snake/[board, rules, space, sim, sim_types, sim_state, baselines,
               control, directives, engine]
 import helpers
@@ -171,7 +171,8 @@ block:
   c.check(extractJsonObject(fenced){"dir"}.getStr() == "up",
     "a fenced reply is recovered")
 
-# 27 -- the shipped tunables equal the recorded sweep, and coil beats forager.
+# 27 -- the shipped tunables ARE the swept pick, and the ladder still
+#       reproduces the numbers that pick was recorded with.
 block:
   let tuning = parseJson(readFile("tools/ci/baseline_tuning.json"))
   for (name, want) in [("coil", CoilTunables), ("forager", ForagerTunables)]:
@@ -187,25 +188,44 @@ block:
     c.check(node{"hungerThreshold"}.getInt == want.hungerThreshold,
       name & " hungerThreshold")
 
-  # The ladder: coil's mean score over the recorded 24-episode ladder beats
-  # forager's, by a margin the sweep pinned.
-  var coilTotal = 0
-  var foragerTotal = 0
-  var episodes = 0
-  for seed in 1 .. 24:
-    var config = defaultGameConfig()
-    config.seed = seed * 977
-    config.maxTurns = 50
-    config.turnSpacingMs = 0
-    let played = runScriptedEpisode(config, [blCoil, blForager, blCoil, blForager])
-    let permille = played.episode.scorePermille()
-    coilTotal = coilTotal + permille[0] + permille[2]
-    foragerTotal = foragerTotal + permille[1] + permille[3]
-    inc episodes
-  let margin = float(coilTotal - foragerTotal) / float(episodes * 2 * 1000)
-  echo "coil vs forager margin over the 24-episode ladder: ", margin
-  c.check(margin > 0.0,
-    "coil out-survives forager over the recorded ladder (margin " &
+  ## The ladder is the regression pin. Eight seeds on each of the three rule
+  ## modules, seated coil, forager, coil, forager, measured through the SAME
+  ## `ladderTotals` proc `tools/tune_baselines.nim --check` uses -- so the
+  ## test and the sweep can never measure two different things. Any change to
+  ## the rules, to the scoring or to either baseline moves these integers.
+  let totals = ladderTotals(CoilTunables, ForagerTunables)
+  let measured = tuning{"measured"}{"total"}
+  echo "ladder: coilPermille=", totals.coilPermille,
+    " foragerPermille=", totals.foragerPermille,
+    " coilTurns=", totals.coilTurns, " foragerTurns=", totals.foragerTurns,
+    " margin=", ladderMargin(totals)
+  c.check(totals.coilPermille == measured{"coilPermille"}.getInt(),
+    "the ladder reproduces the recorded coil score")
+  c.check(totals.foragerPermille == measured{"foragerPermille"}.getInt(),
+    "the ladder reproduces the recorded forager score")
+  c.check(totals.coilTurns == measured{"coilTurns"}.getInt(),
+    "the ladder reproduces the recorded coil survival")
+  c.check(totals.foragerTurns == measured{"foragerTurns"}.getInt(),
+    "the ladder reproduces the recorded forager survival")
+  for index, module in LadderModules:
+    let per = tuning{"measured"}{"perModule"}{module}
+    c.check(totals.perModule[index].coilPermille ==
+      per{"coilPermille"}.getInt(), module & ": coil score")
+    c.check(totals.perModule[index].foragerPermille ==
+      per{"foragerPermille"}.getInt(), module & ": forager score")
+
+  ## The two baselines must play DIFFERENTLY -- a filler that is a copy of the
+  ## other filler tells a champion nothing. The scores are zero-sum per
+  ## episode, so a materially non-zero margin is what separation looks like.
+  let margin = ladderMargin(totals)
+  c.check(abs(margin) >= 0.05,
+    "coil and forager are materially different players (margin " &
     $margin & ")")
+  c.check(totals.coilPermille + totals.foragerPermille == 0,
+    "and every ladder episode is exactly zero sum")
+  ## coil takes the board with no food to race for and a hunger clock that
+  ## punishes greed; forager takes the boards where growing pays.
+  c.check(totals.perModule[1].coilPermille > 0,
+    "coil wins the geese ladder, where the hunger clock punishes greed")
 
 c.report()

@@ -1,15 +1,20 @@
 {
-  "note": "The swept pick. tools/tune_baselines.nim plays a bounded matrix over a fixed 24-episode ladder and writes this file; ci.yml re-runs the sweep with --check and tests/test_snake_control.nim asserts the shipped defaults equal the recorded pick.",
+  "note": "The SWEPT PICK and the ladder it was measured on. tools/tune_baselines.nim --sweep replays a bounded matrix over this ladder and prints every candidate's margin; --check re-plays the ladder with the shipped constants and fails if either the constants or the numbers below have drifted. tests/test_snake_control.nim asserts the same thing through src/snake/engine.nim's ladderTotals, which is the single implementation both use.",
   "ladder": {
-    "episodes": 24,
+    "modules": [
+      "royale",
+      "geese",
+      "tron"
+    ],
+    "seedsPerModule": 8,
     "seedStride": 977,
-    "maxTurns": 50,
     "seats": [
       "coil",
       "forager",
       "coil",
       "forager"
-    ]
+    ],
+    "episodes": 24
   },
   "baselines": {
     "coil": {
@@ -17,7 +22,7 @@
       "spaceCap": 4,
       "headRiskPenalty": 900,
       "killBonus": 120,
-      "foodWeight": 8,
+      "foodWeight": 400,
       "hungerThreshold": 12
     },
     "forager": {
@@ -27,6 +32,36 @@
       "killBonus": 60,
       "foodWeight": 40,
       "hungerThreshold": 999
+    }
+  },
+  "measured": {
+    "comment": "Recorded from the swept pick. The two baselines really do play differently: coil weights space and eats only under its hunger threshold, forager beelines for food and accepts tighter room. Under this game's survival-first, then-length ranking that greed PAYS on the food boards, so the placement margin runs slightly in forager's favour overall while coil takes the geese board. These integers are the regression pin: any change to the rules, the scoring or either baseline moves them.",
+    "total": {
+      "coilPermille": -2330,
+      "foragerPermille": 2330,
+      "coilTurns": 1646,
+      "foragerTurns": 1964
+    },
+    "margin": -0.09708333333333333,
+    "perModule": {
+      "royale": {
+        "coilPermille": -2000,
+        "foragerPermille": 2000,
+        "coilTurns": 585,
+        "foragerTurns": 678
+      },
+      "geese": {
+        "coilPermille": 1334,
+        "foragerPermille": -1334,
+        "coilTurns": 549,
+        "foragerTurns": 640
+      },
+      "tron": {
+        "coilPermille": -1664,
+        "foragerPermille": 1664,
+        "coilTurns": 512,
+        "foragerTurns": 646
+      }
     }
   }
 }
