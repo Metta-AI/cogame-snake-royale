@@ -1,0 +1,717 @@
+{
+  "$schema": "https://softmax.com/schemas/coworld-manifest.json",
+  "tags": [
+    "snake",
+    "free-for-all",
+    "grid",
+    "survival",
+    "simultaneous"
+  ],
+  "episode_timeout_minutes": 20,
+  "game": {
+    "name": "snake-royale",
+    "owner": "daveey@softmax.com",
+    "description": "Four snakes, one small grid, simultaneous moves. Eat to grow, never hit anything, and outlive the other three. One engine, three rule modules: the merged Snake Royale board, the Kaggle Hungry Geese torus, and Tron light cycles.",
+    "runnable": {
+      "type": "game",
+      "image": "{{SNAKE_ROYALE_IMAGE}}",
+      "run": [
+        "/bin/snake-royale"
+      ],
+      "env": {
+        "ANTHROPIC_API_KEY_URI": "secret://coworld/snake-royale/anthropic_api_key"
+      }
+    },
+    "replay_viewer": {
+      "bundle": "static-replay-viewer"
+    },
+    "protocols": {
+      "player": {
+        "type": "uri",
+        "value": "https://github.com/Metta-AI/cogame-snake-royale/blob/main/docs/PROTOCOL.md"
+      },
+      "global": {
+        "type": "uri",
+        "value": "https://github.com/Metta-AI/cogame-snake-royale/blob/main/docs/PROTOCOL.md"
+      }
+    },
+    "docs": {
+      "readme": {
+        "type": "text",
+        "value": "# Snake Royale\n\nFour snakes on a small rectangular grid. Every turn all four move **one cell at the same\ntime** \u2014 nobody sees anybody else's move before it lands. Run into a wall, into anybody's\nbody (your own included), or out of health, and you are gone. Run your head into somebody\nelse's head and, on the default board, the **longer snake lives** and the shorter one does\nnot. Food makes you longer and refills your health; length is the only thing that wins a\nhead-on; and the board only ever gets smaller. The last snake alive takes the round. It takes\nabout ninety seconds to watch and one sentence to explain.\n\nThe strategy this game is buying is **\"who blocks whom\"**: with four snakes on 153 cells,\ncutting a rival's escape route is far cheaper than out-eating it, and cutting one rival's\nroute usually helps a third snake more than it helps you. There is a public one-line `say`\nchannel, so a snake can announce which lane it is taking \u2014 and everyone, including the snake\nit is about to seal in, reads it.\n\n**A policy is just a prompt.** Both champions are `PLAYER_PROMPT` policies; the two fillers\nare scripted baselines; all four run the same image, switched by environment.\n\n## Rule modules\n\nOne engine, three presets \u2014 `royale` (17\u00d79, walls, food, health, longer head wins), `geese`\n(the Kaggle 11\u00d77 torus with the hunger shrink and both-die head-ons) and `tron` (21\u00d79, no\nfood, the trail never clears). See [`docs/MODULES.md`](docs/MODULES.md).\n\n## Repo layout\n\n| Path | What |\n|---|---|\n| `src/snake/` | the sim: `board.nim`, `rules.nim` (the resolver), `space.nim` (one bounded BFS), `upstream.nim` (the transcribed upstream facts), plus the server, the commander layer and the replay |\n| `src/snake_royale.nim` | the game server, `/bin/snake-royale` |\n| `src/snake_royale_player.nim` | the thin seat registrar, `/bin/snake-royale-player` |\n| `client/` | the broadcast chrome: `chrome_common.js` (byte-identical to the starter's), `broadcast_core.js` (the grid renderer) and `replay_broadcast.html` (the starter's page plus the appended SNAKE-ROYALE block) |\n| `replay-viewer/` | the wasm entry, the emscripten link flags and the static shell |\n| `data/` | the board art: nano-banana renders of the Softmax cog, one kit per colourway |\n| `scripts/art/` | the source sheets and the split script that made `data/` |\n| `tools/ci/` | the CI harness: the docker smoke, the viewer smoke, the renderer fixture, the policy set |\n| `docs/` | the rules, the modules, the wire protocol, and the accepted design note |\n\n## Playing a seat\n\n```bash\ncoworld upload-policy coworld-snake-royale:latest \\\n  --name my-snake --run /bin/snake-royale-player \\\n  --secret-env PLAYER_PROMPT=\"take the direction with the most free space, \\\nand only eat when your health is under 12\"\n```\n\n`PLAYER_SCRIPTED=coil` or `PLAYER_SCRIPTED=forager` seats one of the two shipped baselines\ninstead. A seat that sets neither is `coil`.\n\n## Building\n\nThe game is Nim. `ci.yml` is the harness: it runs every `tests/*.nim` in debug and release,\nbuilds the production image and plays one real episode through raw docker\n(`tools/ci/docker_smoke.sh`), then builds the static replay-viewer bundle and **opens it in\nheadless chromium** against the replay that episode produced.\n\n```bash\nnim c -r tests/tests.nim                      # the whole suite\ndocker build -t coworld-snake-royale:ci .     # the production image\n./tools/ci/docker_smoke.sh coworld-snake-royale:ci\n./tools/build_replay_viewer.sh \"$PWD/dist/static-replay-viewer\"\n```\n\n## Watching\n\nReplays are a **static file plus a browser wasm viewer, never a pod**: the manifest declares\n`\"replay_viewer\": {\"bundle\": \"static-replay-viewer\"}`, `tools/build_replay_viewer.sh`\ncompiles the *same* sim module to wasm, and the viewer re-derives every frame from the\nrecorded direction bytes in the browser. Everything the viewer needs \u2014 names, config,\nper-turn direction bytes, the seed \u2014 lives in the replay bytes; no server is contacted except\nS3 for the file.\n\n`python3 tools/replay_summary.py <file>` prints one strict-UTF-8 JSON object describing any\nreplay, using only the Python 3 standard library.\n"
+      },
+      "pages": [
+        {
+          "id": "rules.md",
+          "title": "Rules",
+          "content": {
+            "type": "text",
+            "value": "# Snake Royale \u2014 rules\n\nFour snakes on a small rectangular grid. Every turn all four move **one cell at the same\ntime** \u2014 nobody sees anybody else's move before it lands. Run into a wall, into anybody's\nbody (your own included), or out of health, and you are gone. Run your head into somebody\nelse's head and, on the default board, the **longer snake lives** and the shorter one does\nnot. Food makes you longer and refills your health; length is the only thing that wins a\nhead-on; and the board only ever gets smaller. The last snake alive takes the round.\n\n## The board\n\nAn integer grid of `boardW \u00d7 boardH` cells. Coordinates are `[x, y]` with **x growing right\nand y growing down**; `[0,0]` is the top-left. `up` = y\u22121, `right` = x+1, `down` = y+1,\n`left` = x\u22121.\n\nThe four **spawn anchors** are the fixed points `(w div 4, h div 4)`,\n`(w \u2212 1 \u2212 w div 4, h div 4)`, `(w div 4, h \u2212 1 \u2212 h div 4)`,\n`(w \u2212 1 \u2212 w div 4, h \u2212 1 \u2212 h div 4)` \u2014 derived from the dimensions, not authored. A snake\nstarts with `startLength` segments all stacked on its anchor, and its `last_dir` is the axis\nwith the larger absolute delta toward the board centre, x winning a tie. On turn 1 there is\nno neck, so all four directions are legal.\n\n## Turn structure \u2014 the exact resolution order\n\n1. `turn += 1`.\n2. **Neck repair.** If `head + dir` is the second body segment, use `alt` if it is present\n   and is not the neck, else `last_dir`. `reverseRepaired` counts it either way. The repair\n   never invents a *legal* move \u2014 if `last_dir` walks into a wall, step 4 kills the snake.\n3. **Targets.** `target = head + d`, modulo the board when it wraps. `last_dir = d`.\n4. **Wall deaths** (walled boards only), cause `wall`.\n5. **Heads move.**\n6. **Eat.** Remove the food, keep the tail this turn, `health = healthStart`.\n7. **Tails.** Unless the board leaves a trail and unless the snake ate, pop the last segment.\n8. **Hunger.** `health -= 1` and zero kills, cause `starve`. On a shrink turn every live\n   snake pops one more segment; length zero dies.\n9. **Head-to-head.** `longer_wins` and exactly one strictly greatest post-step-8 length \u2192\n   that one survives; otherwise everybody in the cell dies. Head-ons resolve **before** body\n   collisions on purpose: without that ordering the winner would immediately be killed by the\n   loser's neck.\n10. **Body collisions**, against occupancy frozen after steps 5\u20139. A snake may legally follow\n    a **vacating tail**, but not the tail of a snake that ate this turn. A snake killed in\n    step 4, 8 or 9 still occupies the board for this test.\n11. **Remove the dead.**\n12. **Food respawn** from a separate seeded stream (`seed xor 0x5EED`), so a change to seat\n    behaviour can never shift the food draw.\n13. **Derived measurements**: `freeSpace`, the `trapped` flag, the alliance audit.\n14. **Bubbles age**, the `gameHash` folds over the whole board state, and the turn's\n    direction byte plus the hash are appended to the replay.\n15. **End evaluation**: one or zero snakes alive ends it (`last_standing`); `maxTurns` ends\n    it (`full_time`).\n\n## Scoring\n\nEvery seat is ranked, descending, by `(survivedTurns, finalLength, foodEaten)`. Places 1..4\npay `[+1000, +333, \u2212333, \u22121000]` permille; a tied group splits its slice exactly with\n`floorDiv` / `floorMod`, the first `rem` members in ascending slot order taking one extra\npermille. `scores[s] = scorePermille[s] / 1000`, **higher is better**, and the four scores\nsum to exactly zero.\n\n`finalLength`, `maxLength`, `foodEaten`, `declinedKills`, `trappedTurns`, `reverseRepaired`\nand `saidTurns` are measured and shown, never scored.\n\n## The alliance audit\n\n`declinedKills[s]` counts the turns on which seat `s` had a **free kill and did not take it**:\nsome direction was legal, its target was reachable by exactly one opponent's head, the\nhead-on outcome was `win`, the move's free space was at least the seat's own length \u2014 and the\nseat moved somewhere else. It is computed by the same `headOnOutcome` / `willOccupy` /\n`freeSpaceFrom` procs the resolver uses, and it is **not** in `scores`.\n\n## Divergences from the upstreams\n\n1. Hungry Geese shrinks every 40 steps; `geese` uses 20 so the hunger clock bites twice in a\n   50-turn episode.\n2. Battlesnake health is 100; `royale` uses 30 across 50 turns for the same pressure.\n3. Hungry Geese starts at length 1; every module except `tron` starts at 3.\n4. Naming your own neck is a death upstream; here it is **repaired** and counted. A model's\n   formatting slip must not be an instant loss.\n5. Battlesnake hazards are not implemented in v1.\n"
+          }
+        },
+        {
+          "id": "modules.md",
+          "title": "Rule modules",
+          "content": {
+            "type": "text",
+            "value": "# Rule modules\n\nOne engine, three named presets of the same eight switches. `module` selects a preset; every\nswitch is also independently settable in a `game_config`.\n\n| Switch | `royale` (default) | `geese` | `tron` |\n|---|---|---|---|\n| `boardW` \u00d7 `boardH` | 17 \u00d7 9 | 11 \u00d7 7 | 21 \u00d7 9 |\n| `wrap` (torus) | `false` \u2014 walls | `true` \u2014 torus | `false` \u2014 walls |\n| `foodCount` | 3 | 2 | 0 |\n| `healthStart` (0 = off) | 30 | 0 | 0 |\n| `shrinkEvery` (0 = off) | 0 | 20 | 0 |\n| `leaveTrail` | `false` | `false` | `true` |\n| `headToHead` | `longer_wins` | `both_die` | `both_die` |\n| `startLength` | 3 | 3 | 1 |\n| `maxTurns` | 50 | 50 | 50 |\n\n`royale` is the merged flagship and the league's default. `geese` is the faithful Kaggle\nboard \u2014 11 columns by 7 rows, a torus, the hunger shrink, both-die head-ons. `tron` is the\nsame engine with growth and food switched off, which is the cheapest possible proof that the\nrule-module axis is real.\n\nWhy `royale` has **walls** while `geese` has a **torus**: on screen a torus is a lie \u2014 a\nsnake crossing the left edge reappears on the right and a spectator loses it. Walls make the\ntrap story readable, so the flagship module has walls and the faithful-Kaggle module keeps\nthe torus it is faithful to. The `geese` viewer draws **wrap ghosts** precisely because a\ntorus needs the help.\n\nWhy 17 \u00d7 9: 153 cells with four snakes is dense enough that turn 20 already has choke points,\nand the 1.889 aspect is the embed frame's own aspect, so almost nothing is letterboxed at\n360 px.\n"
+          }
+        },
+        {
+          "id": "protocol.md",
+          "title": "Wire protocol",
+          "content": {
+            "type": "text",
+            "value": "# Wire protocol\n\n## The Coworld contract\n\n| Direction | Variable | Meaning |\n|---|---|---|\n| in | `COGAME_CONFIG_URI` | the episode's `game_config` |\n| out | `COGAME_RESULTS_URI` | the results document (closed schema) |\n| out | `COGAME_SAVE_REPLAY_URI` | the binary `COWLDSNK` replay |\n| out | `COGAME_PLAYER_FAILURE_URI` | one `{\"message\",\"failed_policy_index\"}` payload |\n| out | `COGAME_EVENTS_URI` | the tier-2 JSON-lines analysis stream |\n| local | `COGAME_LOAD_REPLAY_URI` | developer replay mode, never declared to the platform |\n| \u2014 | `COGAME_HOST` / `COGAME_PORT` | where to listen (`HOST` / `PORT` also accepted) |\n\nPlayer sockets live at `/player?slot=<i>&token=<t>` and are **closed unless the token matches\nthe seat**. `/global` is the spectator stream; `/healthz`, `/client/player` and\n`/client/global` answer the certifier's browser probes and keep answering for a bounded\nshutdown grace after the artifacts are written.\n\n## Per-seat observation\n\nPerfect information: the whole board is in every observation, in board cells, integers only.\n\n```json\n{\n  \"module\": \"royale\",\n  \"board\": {\"w\": 17, \"h\": 9, \"wrap\": false},\n  \"turn\": 17, \"max_turns\": 50, \"turns_left\": 33, \"alive\": 3,\n  \"rules\": {\"head_to_head\": \"longer_wins\", \"food_count\": 3,\n            \"health_start\": 30, \"shrink_every\": 0, \"leave_trail\": false},\n  \"you\": {\"id\": \"COG-beta\", \"colour\": \"teal\", \"alive\": true,\n          \"head\": [7,4], \"body\": [[7,4],[7,5],[6,5],[6,6]],\n          \"length\": 4, \"health\": 21, \"last_dir\": \"up\",\n          \"free_space\": 62, \"food_eaten\": 2},\n  \"snakes\": [ ... every other seat, same order every turn, dead ones included ... ],\n  \"food\": [[0,7],[11,1],[14,6]],\n  \"moves\": [\n    {\"dir\":\"up\",\"to\":[7,3],\"legal\":true,\"wall\":false,\"body\":\"none\",\"food\":false,\n     \"head_risk\":\"safe\",\"free_space\":58}\n  ],\n  \"said\": [{\"id\":\"COG-delta\",\"text\":\"north lane is mine\"}],\n  \"your_notes\": \"hold the north corridor, alpha is short\"\n}\n```\n\n`moves[]` always has exactly four entries in the wire order `up, right, down, left`, and it\nis the **precomputed legal choice set**: `legal` is the resolver's own `willOccupy` plus\nbounds, `head_risk` is the resolver's own `headOnOutcome`, and `free_space` is the resolver's\nown bounded flood fill. One predicate, four callers \u2014 the observation can never claim\nsomething the resolver disagrees with.\n\n**Hidden from a seat:** every seat's real policy name, the other seats' `notes`, the other\nseats' pending direction for this turn, the future of the food stream, and `spawnDeal`.\n\n## Reply schema\n\n```json\n{\"dir\":\"up\",\"alt\":\"left\",\"say\":\"north lane is mine\",\"notes\":\"cut alpha off at 7,3\"}\n```\n\n| Field | Cap | Repair |\n|---|---|---|\n| `dir` | \u2014 | unparseable or absent \u2192 `alt`, then `last_dir`, then the first legal direction |\n| `alt` | \u2014 | absent or unparseable \u2192 skipped in the ladder |\n| `say` | **24 runes**, public | rune-boundary truncation, then the printable shout filter |\n| `notes` | **160 runes**, private | newlines collapsed, then rune-boundary truncation |\n\nThe whole reply is read with a 4096-byte cap and the JSON is extracted tolerantly (markdown\nfences and surrounding prose survive). **Every truncation lands on a rune boundary.** The\nvalidator repairs, never rejects: there is no reply that leaves a snake unactuated.\n\n## The replay\n\nBinary `COWLDSNK`: a header, the config JSON (seed, module, the whole board document, the\ncadence constants, `spawnDeal`, the real player names, aliases and colours), the join\nrecords, one direction byte per seat per turn plus a per-turn `gameHash`, and the chat\nrecords (`register`, `directive`, `fallback`, `budget_guard`, `stop`, `result`). Food is not\nrecorded and does not need to be: the food stream is a pure function of the seed and the\nresolution order, so the wasm viewer re-derives every apple and the hash chain proves it.\n\n`python3 tools/replay_summary.py <file>` prints one strict-UTF-8 JSON object describing a\nreplay, using only the Python 3 standard library.\n"
+          }
+        }
+      ]
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tokens",
+        "players"
+      ],
+      "properties": {
+        "tokens": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "Per-seat player tokens. Injected by the episode runner; never present in a shipped game_config."
+        },
+        "players": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "One entry per seat, carrying the seat's real policy name."
+        },
+        "slots": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 0,
+          "maxItems": 4,
+          "description": "Unused: a four-way free-for-all has no sides. The colour and spawn deal come from the seeded spawnDeal."
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "module": {
+          "type": "string",
+          "enum": [
+            "royale",
+            "geese",
+            "tron"
+          ],
+          "default": "royale"
+        },
+        "boardW": {
+          "type": "integer",
+          "minimum": 7,
+          "maximum": 31
+        },
+        "boardH": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 21
+        },
+        "wrap": {
+          "type": "boolean"
+        },
+        "foodCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
+        },
+        "healthStart": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200
+        },
+        "shrinkEvery": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200
+        },
+        "leaveTrail": {
+          "type": "boolean"
+        },
+        "headToHead": {
+          "type": "string",
+          "enum": [
+            "longer_wins",
+            "both_die"
+          ]
+        },
+        "startLength": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "maxTurns": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 200
+        },
+        "renderFramesPerTurn": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 48
+        },
+        "sayTurns": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
+        },
+        "attempt1Ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 60000
+        },
+        "retryMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 60000
+        },
+        "turnBudgetMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 120000
+        },
+        "turnSpacingMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000
+        },
+        "wallClockBudgetSeconds": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 640
+        },
+        "lobbyJoinTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 300
+        },
+        "gameOverTurns": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "minPlayers": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "fastMode": {
+          "type": "boolean"
+        },
+        "showPlayerLabels": {
+          "type": "boolean"
+        },
+        "num_agents": {
+          "type": "integer",
+          "minimum": 4,
+          "maximum": 4,
+          "default": 4
+        }
+      }
+    },
+    "results_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "The seats' real policy names \u2014 spectator side only."
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "COG-alpha .. COG-delta, the only names an agent ever sees."
+        },
+        "colours": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "amber | teal | violet | lime, dealt by the seeded spawnDeal."
+        },
+        "scores": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "scorePermille / 1000, in [-1, +1]; higher is better; sums to exactly 0."
+        },
+        "win": {
+          "type": "array",
+          "items": {
+            "type": "boolean"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "place == 1. A shared first place gives every tied seat a win."
+        },
+        "place": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "1..4, descending by (survivedTurns, finalLength, foodEaten)."
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "deadline",
+            "fault"
+          ]
+        },
+        "endRule": {
+          "type": "string",
+          "enum": [
+            "last_standing",
+            "full_time",
+            "wall_clock",
+            "sim_fault",
+            "host_error"
+          ]
+        },
+        "module": {
+          "type": "string"
+        },
+        "turnsPlayed": {
+          "type": "integer"
+        },
+        "survivedTurns": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "turnsPlayed if alive at the end, else deathTurn - 1."
+        },
+        "deathTurn": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "0 means alive when the episode ended."
+        },
+        "deathCause": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "wall | body | headon | starve, or empty."
+        },
+        "killedBy": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "the slot that killed this seat, or -1."
+        },
+        "finalLength": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "length at the moment the snake left the board."
+        },
+        "maxLength": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "the longest this snake ever was."
+        },
+        "foodEaten": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "apples taken."
+        },
+        "declinedKills": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "the alliance audit: free head-ons this seat did not take."
+        },
+        "trappedTurns": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "turns spent with freeSpace below its own length."
+        },
+        "reverseRepaired": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "turns on which the neck rule repaired the named direction."
+        },
+        "saidTurns": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "turns on which this seat used the public say channel."
+        },
+        "policyKinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "llm | scripted, as the game was given them."
+        },
+        "crossPlay": {
+          "type": "boolean"
+        },
+        "llmTurns": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "turns whose direction came from a model reply."
+        },
+        "fallbackTurns": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "turns whose direction came from the coil fallback."
+        },
+        "ordersRejected": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "replies whose fields had to be repaired."
+        },
+        "deadSeats": {
+          "type": "array",
+          "items": {
+            "type": "boolean"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "seats that never registered or never answered."
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "stopDetail": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "player": [
+    {
+      "id": "coil",
+      "type": "player",
+      "name": "coil",
+      "description": "The survival heuristic: space first, food only when hungry or free. The certification player, the per-turn fallback and the default for an unregistered seat.",
+      "image": "{{SNAKE_ROYALE_IMAGE}}",
+      "run": [
+        "/bin/snake-royale-player"
+      ],
+      "source_url": "https://github.com/Metta-AI/cogame-snake-royale",
+      "env": {
+        "PLAYER_SCRIPTED": "coil",
+        "PLAYER_POLICY_LABEL": "coil"
+      },
+      "resources": {
+        "requests": {
+          "cpu": "200m",
+          "memory": "128Mi"
+        },
+        "limits": {
+          "cpu": "1"
+        }
+      }
+    },
+    {
+      "id": "forager",
+      "type": "player",
+      "name": "forager",
+      "description": "Visibly greedier: it beelines for food and accepts tighter space, so it grows faster and traps itself more. The thing a champion should be able to beat.",
+      "image": "{{SNAKE_ROYALE_IMAGE}}",
+      "run": [
+        "/bin/snake-royale-player"
+      ],
+      "source_url": "https://github.com/Metta-AI/cogame-snake-royale",
+      "env": {
+        "PLAYER_SCRIPTED": "forager",
+        "PLAYER_POLICY_LABEL": "forager"
+      },
+      "resources": {
+        "requests": {
+          "cpu": "200m",
+          "memory": "128Mi"
+        },
+        "limits": {
+          "cpu": "1"
+        }
+      }
+    }
+  ],
+  "variants": [
+    {
+      "id": "royale",
+      "name": "Snake Royale (4 snakes, walls, food, longer head wins)",
+      "description": "Four snakes on a 17x9 walled grid. Every turn all four move one cell at the same time. Food makes you longer and refills your health, health drains one a turn, and a head-on is won by the strictly longer snake - equal lengths both die. Run into a wall, into anybody's body including your own, or out of health, and you are gone. Last snake alive takes the round; placement pays +1.000, +0.333, -0.333, -1.000 and the four scores always sum to zero.",
+      "game_config": {
+        "players": [
+          {
+            "name": "Cog1"
+          },
+          {
+            "name": "Cog2"
+          },
+          {
+            "name": "Cog3"
+          },
+          {
+            "name": "Cog4"
+          }
+        ],
+        "num_agents": 4,
+        "minPlayers": 4,
+        "module": "royale",
+        "boardW": 17,
+        "boardH": 9,
+        "wrap": false,
+        "foodCount": 3,
+        "healthStart": 30,
+        "shrinkEvery": 0,
+        "leaveTrail": false,
+        "headToHead": "longer_wins",
+        "startLength": 3,
+        "maxTurns": 50,
+        "renderFramesPerTurn": 12,
+        "sayTurns": 2,
+        "attempt1Ms": 6000,
+        "retryMs": 3000,
+        "turnBudgetMs": 11000,
+        "turnSpacingMs": 9000,
+        "wallClockBudgetSeconds": 640,
+        "lobbyJoinTimeoutSeconds": 90,
+        "gameOverTurns": 2,
+        "fastMode": true,
+        "showPlayerLabels": false
+      }
+    },
+    {
+      "id": "geese",
+      "name": "Hungry Geese (4 geese, 11x7 torus, hunger every 20 turns)",
+      "description": "The Kaggle board: four geese on an 11x7 torus with no walls at all - leave the left edge and you come back on the right. Two apples are always out. There is no health; instead every twentieth turn everybody loses a segment, so a goose that stops eating starves down to nothing. A head-on kills everyone in the cell no matter who is longer, which makes the torus's blind corners genuinely dangerous. Last goose standing.",
+      "game_config": {
+        "players": [
+          {
+            "name": "Cog1"
+          },
+          {
+            "name": "Cog2"
+          },
+          {
+            "name": "Cog3"
+          },
+          {
+            "name": "Cog4"
+          }
+        ],
+        "num_agents": 4,
+        "minPlayers": 4,
+        "module": "geese",
+        "boardW": 11,
+        "boardH": 7,
+        "wrap": true,
+        "foodCount": 2,
+        "healthStart": 0,
+        "shrinkEvery": 20,
+        "leaveTrail": false,
+        "headToHead": "both_die",
+        "startLength": 3,
+        "maxTurns": 50,
+        "renderFramesPerTurn": 12,
+        "sayTurns": 2,
+        "attempt1Ms": 6000,
+        "retryMs": 3000,
+        "turnBudgetMs": 11000,
+        "turnSpacingMs": 9000,
+        "wallClockBudgetSeconds": 640,
+        "lobbyJoinTimeoutSeconds": 90,
+        "gameOverTurns": 2,
+        "fastMode": true,
+        "showPlayerLabels": false
+      }
+    },
+    {
+      "id": "tron",
+      "name": "Tron light cycles (4 cycles, no food, the trail never clears)",
+      "description": "The same engine with growth and food switched off: four light cycles on a 21x9 walled grid, each leaving a permanent wall behind it. Nothing is ever eaten and no tail ever vacates, so the board only fills. There is nothing to optimise except space - every turn is a choice about whose room closes first, yours or theirs. A head-on kills everyone in the cell. Last cycle running.",
+      "game_config": {
+        "players": [
+          {
+            "name": "Cog1"
+          },
+          {
+            "name": "Cog2"
+          },
+          {
+            "name": "Cog3"
+          },
+          {
+            "name": "Cog4"
+          }
+        ],
+        "num_agents": 4,
+        "minPlayers": 4,
+        "module": "tron",
+        "boardW": 21,
+        "boardH": 9,
+        "wrap": false,
+        "foodCount": 0,
+        "healthStart": 0,
+        "shrinkEvery": 0,
+        "leaveTrail": true,
+        "headToHead": "both_die",
+        "startLength": 1,
+        "maxTurns": 50,
+        "renderFramesPerTurn": 12,
+        "sayTurns": 2,
+        "attempt1Ms": 6000,
+        "retryMs": 3000,
+        "turnBudgetMs": 11000,
+        "turnSpacingMs": 9000,
+        "wallClockBudgetSeconds": 640,
+        "lobbyJoinTimeoutSeconds": 90,
+        "gameOverTurns": 2,
+        "fastMode": true,
+        "showPlayerLabels": false
+      }
+    }
+  ],
+  "certification": {
+    "players": [
+      {
+        "player_id": "coil"
+      },
+      {
+        "player_id": "forager"
+      },
+      {
+        "player_id": "coil"
+      },
+      {
+        "player_id": "forager"
+      }
+    ],
+    "game_config": {
+      "players": [
+        {
+          "name": "Cog1"
+        },
+        {
+          "name": "Cog2"
+        },
+        {
+          "name": "Cog3"
+        },
+        {
+          "name": "Cog4"
+        }
+      ],
+      "num_agents": 4,
+      "minPlayers": 4,
+      "seed": 42,
+      "module": "royale",
+      "boardW": 17,
+      "boardH": 9,
+      "wrap": false,
+      "foodCount": 4,
+      "healthStart": 60,
+      "shrinkEvery": 0,
+      "leaveTrail": false,
+      "headToHead": "longer_wins",
+      "startLength": 3,
+      "maxTurns": 40,
+      "renderFramesPerTurn": 12,
+      "sayTurns": 2,
+      "attempt1Ms": 6000,
+      "retryMs": 3000,
+      "turnBudgetMs": 11000,
+      "turnSpacingMs": 0,
+      "wallClockBudgetSeconds": 200,
+      "lobbyJoinTimeoutSeconds": 45,
+      "gameOverTurns": 2,
+      "fastMode": true,
+      "showPlayerLabels": false
+    }
+  }
+}

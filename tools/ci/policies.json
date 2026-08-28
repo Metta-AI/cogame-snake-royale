@@ -1,0 +1,35 @@
+[
+  {
+    "name": "snake-royale-strangler",
+    "run": "/bin/snake-royale-player",
+    "env": {
+      "PLAYER_PROMPT": "Win by shrinking everybody else's room, not by racing them to food. Every turn read the\n`moves` list first and throw away any direction whose `legal` is false or whose `head_risk`\nis \"lose\" or \"tie\" - no plan is worth a coin-flip death. Among what is left, take the one\nwith the largest `free_space`, and break that tie with food only.\nNever let your own `free_space` fall below twice your length. If it has, spend the turn\nturning back toward open board even if that means giving up a nearby apple.\nEat only when `health` is under 12, or when the food sits on a cell you were moving through\nanyway, or when you are the shortest snake alive - length is only worth having because it\nwins head-ons.\nOnce you are strictly the longest snake, hunt: take a direction whose `head_risk` is \"win\"\nwhenever one exists and its `free_space` is at least your length, because a won head-on\nremoves a whole snake for free. Otherwise steer to sit between the two shortest snakes and\nthe open half of the board, so their space closes before yours does.\nWhen a rival's `free_space` in the report is below its length it is already dead. Do not\nspend a turn near it; just stay out of the cells it will thrash into.\nUse `say` to claim the lane you are actually taking, four or five words, and then take it.\nA rival who believes you detours; a rival who does not learns nothing.",
+      "PLAYER_POLICY_LABEL": "strangler"
+    }
+  },
+  {
+    "name": "snake-royale-glutton",
+    "run": "/bin/snake-royale-player",
+    "env": {
+      "PLAYER_PROMPT": "Get long early, then let length do the killing. For the first third of the episode take the\nshortest safe path to the nearest food every single turn: from `moves` drop anything with\n`legal` false or `head_risk` \"lose\" or \"tie\", then take the direction whose target has\n`food` true, else the legal direction that shortens the distance to the nearest cell in\n`food` while keeping `free_space` at least your length plus four.\nRefuse exactly two things while feeding: a move whose `free_space` is below your length plus\nfour, and a move into a one-cell-wide corridor with a rival head within two cells of its far\nend.\nFrom the moment you are the longest snake alive, stop chasing food unless `health` is under\n10, and start steering INTO the shortest rival: prefer a direction whose `head_risk` is\n\"win\", then one that puts your head within two cells of that rival's head on its open side,\nbecause a snake that keeps turning away from you runs out of board.\nHug a wall only when your `free_space` is at least three times your length. A wall is a free\nhalf of a trap and it is usually yours, not theirs.\nIf two rivals are converging on the same apple, take neither: go eat the far apple, let them\nsettle it, and take the survivor's space.\nUse `say` to announce what you just ate and how long you now are. It is true, it is free, and\na rival that starts avoiding your head has already given you the board.",
+      "PLAYER_POLICY_LABEL": "glutton"
+    },
+    "player": "ply_bac48eb1-662e-44f8-973d-f3e016dccf5d"
+  },
+  {
+    "name": "snake-royale-coil",
+    "run": "/bin/snake-royale-player",
+    "env": {
+      "PLAYER_SCRIPTED": "coil",
+      "PLAYER_POLICY_LABEL": "coil"
+    }
+  },
+  {
+    "name": "snake-royale-forager",
+    "run": "/bin/snake-royale-player",
+    "env": {
+      "PLAYER_SCRIPTED": "forager",
+      "PLAYER_POLICY_LABEL": "forager"
+    }
+  }
+]

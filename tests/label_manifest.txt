@@ -1,0 +1,13 @@
+eats — length
+runs into a wall
+runs into a body
+starves
+HEAD-ON — 
+ wins the cell
+everybody in that cell dies
+is TRAPPED — 
+HUNGER — everyone loses a segment
+declines a free head-on
+MISSED THE CALL — coil move
+DUEL — two snakes left
+Last snake standing

@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>snake-royale renderer fixture</title>
+<style>
+  html, body { margin: 0; background: #120d09; color: #f2e8d8;
+    font-family: system-ui, sans-serif; }
+  .frame { display: inline-block; margin: 4px; vertical-align: top; }
+  .frame span { font-size: 10px; color: #8a7f72; }
+  canvas { display: block; background: #16110d; }
+</style>
+</head>
+<body>
+<!--
+  The worst-case text chrome, driven against the SHIPPED renderer.
+
+  tools/ci/docker_smoke.sh runs with NO ANTHROPIC_API_KEY, so every seat in
+  the CI replay plays a scripted baseline and a scripted baseline emits no
+  `say` at all: the smoke replay carries ZERO LLM text, and nothing that plays
+  it can ever draw the say bubble (the cogchemists 2026-08-24 scar).
+
+  This page loads the SHIPPED broadcast_core.js out of the built bundle -- the
+  same file the static viewer's Worker imports, not a re-implementation of it
+  (the particle-worlds 2026-08-26 scar) -- and drives its own drawing path with
+  a full-cap 24-rune `say` on all four seats INCLUDING a snake on the top row
+  (the negative-y bubble case), a three-way head-on, a trapped snake, and all
+  three modules' board shapes, at several canvas widths including 360 px.
+
+  It also mounts the shipped index.html in an iframe so a regression in the
+  page itself (a syntax error, a missing id) surfaces here too.
+
+  Success is the same signal the real shell uses: data-replay-loaded="true" on
+  <html> once every frame has drawn.
+-->
+<div id="frames"></div>
+<iframe id="shell" src="./index.html" width="360" height="203"
+        style="border:0;opacity:0.001;position:absolute;left:-9999px"></iframe>
+<script src="./wire_constants.js"></script>
+<script src="./chrome_common.js"></script>
+<script src="./broadcast_core.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var CAP = (window.SNAKE_WIRE && window.SNAKE_WIRE.maxSayRunes) || 24;
+  // Exactly the server's cap, in the widest characters the sanitiser allows.
+  var SAY = 'WWWWWWWWWWWWWWWWWWWWWWWW'.slice(0, CAP);
+  var COLOURS = (window.SNAKE_WIRE && window.SNAKE_WIRE.colours) ||
+    ['amber', 'teal', 'violet', 'lime'];
+
+  function body(cells) { return cells; }
+
+  function packet(board, seats) {
+    var snakes = [];
+    for (var i = 0; i < 4; i++) {
+      var s = seats[i];
+      snakes.push({
+        slot: i, alias: 'COG-' + ['alpha', 'beta', 'gamma', 'delta'][i],
+        name: ['daveey', 'daveey-1', 'Baseline (1)', 'Baseline (2)'][i],
+        colour: COLOURS[i], alive: s.alive !== false,
+        body: body(s.body), prev: body(s.body),
+        length: s.body.length, health: s.hp == null ? 30 : s.hp,
+        free: s.free == null ? 40 : s.free, trapped: !!s.trapped,
+        ate: !!s.ate, dir: i % 4, died: false
+      });
+    }
+    var bubbles = [];
+    for (var k = 0; k < 4; k++) {
+      bubbles.push({ slot: k, text: SAY,
+        x: seats[k].body[0][0], y: seats[k].body[0][1] });
+    }
+    return {
+      protocol: 'snake-royale/v1',
+      board: board,
+      alpha: 400,
+      snakes: snakes,
+      food: [[1, 1], [board.w - 2, board.h - 2]],
+      bubbles: bubbles,
+      // A three-way head-on in one cell: the flash must be drawn, never a
+      // silent disappearance.
+      flashes: [{ k: 'headon', x: (board.w >> 1), y: (board.h >> 1), slot: 0 },
+                { k: 'eat', x: 1, y: 1, slot: 1 }],
+      chrome: {
+        t: 12, st: 0, mx: 40, mt: 50, turn: 12, turns: 40, ph: 'playing',
+        lob: 0, sp: 1, pl: true, lp: false, sk: false, ff: false, en: true,
+        over: false, alive: 4, module: board.module,
+        moduleLine: board.module + ' · ' + board.w + '×' + board.h,
+        boardW: board.w, boardH: board.h, wrap: board.wrap, duel: -1,
+        mismatch: -1, roster: [], beats: [], lulls: [],
+        lead: { teams: ['s0', 's1', 's2', 's3'], pts: [] },
+        feed: [{ k: 'say', slot: 0, row: 'COG-alpha: "' + SAY + '"' }],
+        results: null
+      }
+    };
+  }
+
+  // All three shipped board shapes, and a snake on the TOP ROW in each so the
+  // bubble has nowhere above it to go.
+  var BOARDS = [
+    { w: 17, h: 9, wrap: false, cellPx: 32, trail: false, module: 'royale' },
+    { w: 11, h: 7, wrap: true, cellPx: 32, trail: false, module: 'geese' },
+    { w: 21, h: 9, wrap: false, cellPx: 32, trail: true, module: 'tron' }
+  ];
+  var WIDTHS = [360, 640, 1024];
+
+  function seatsFor(board) {
+    return [
+      { body: [[2, 0], [2, 1], [2, 2]], trapped: false },
+      { body: [[board.w - 3, 0], [board.w - 3, 1], [board.w - 3, 2]],
+        trapped: true, free: 2 },
+      { body: [[2, board.h - 1], [3, board.h - 1], [4, board.h - 1]],
+        ate: true },
+      { body: [[board.w - 3, board.h - 1], [board.w - 4, board.h - 1]],
+        hp: 3 }
+    ];
+  }
+
+  var host = document.getElementById('frames');
+  var drawn = 0;
+  BOARDS.forEach(function (board) {
+    WIDTHS.forEach(function (width) {
+      var wrap = document.createElement('div');
+      wrap.className = 'frame';
+      var label = document.createElement('span');
+      label.textContent = board.module + ' @ ' + width + 'px';
+      var canvas = document.createElement('canvas');
+      var height = Math.round(width * 203 / 360);
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+      canvas.width = width;
+      canvas.height = height;
+      wrap.appendChild(label);
+      wrap.appendChild(canvas);
+      host.appendChild(wrap);
+      var core = window.BroadcastCore.create({
+        canvas: canvas, websocket: false, playoutBuffer: false,
+        viewportWidth: width, viewportHeight: height, devicePixelRatio: 1,
+        onText: function () { }, onStatus: function () { },
+        onFirstFrame: function () { drawn++; }
+      });
+      core.start();
+      core.ingest(JSON.stringify(packet(board, seatsFor(board))));
+    });
+  });
+
+  // Self-check: the cap the server enforces is the cap this fixture drove.
+  if (SAY.length !== CAP) {
+    document.documentElement.setAttribute('data-replay-error',
+      'fixture say length ' + SAY.length + ' is not the server cap ' + CAP);
+  } else if (drawn !== BOARDS.length * WIDTHS.length) {
+    document.documentElement.setAttribute('data-replay-error',
+      'only ' + drawn + ' of ' + (BOARDS.length * WIDTHS.length) +
+      ' fixture frames drew');
+  } else {
+    document.documentElement.setAttribute('data-replay-loaded', 'true');
+  }
+})();
+</script>
+</body>
+</html>

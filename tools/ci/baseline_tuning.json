@@ -1,0 +1,32 @@
+{
+  "note": "The swept pick. tools/tune_baselines.nim plays a bounded matrix over a fixed 24-episode ladder and writes this file; ci.yml re-runs the sweep with --check and tests/test_snake_control.nim asserts the shipped defaults equal the recorded pick.",
+  "ladder": {
+    "episodes": 24,
+    "seedStride": 977,
+    "maxTurns": 50,
+    "seats": [
+      "coil",
+      "forager",
+      "coil",
+      "forager"
+    ]
+  },
+  "baselines": {
+    "coil": {
+      "spaceWeight": 1000,
+      "spaceCap": 2,
+      "headRiskPenalty": 900,
+      "killBonus": 120,
+      "foodWeight": 8,
+      "hungerThreshold": 12
+    },
+    "forager": {
+      "spaceWeight": 400,
+      "spaceCap": 1,
+      "headRiskPenalty": 500,
+      "killBonus": 60,
+      "foodWeight": 40,
+      "hungerThreshold": 999
+    }
+  }
+}
