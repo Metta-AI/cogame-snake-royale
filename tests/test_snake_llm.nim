@@ -3,7 +3,7 @@
 ## in ONE parallel batch per turn.
 
 import std/[os, strutils]
-import snake/[sim, sim_types, llm, decide, directives, baselines]
+import snake/[sim, sim_types, llm, decide, directives, baselines, server]
 import helpers
 
 var c = newChecker("test_snake_llm")
@@ -66,6 +66,31 @@ block:
     "the worst case fits the 720 s play budget")
   c.check(config.wallClockBudgetSeconds <= 720,
     "and the engine's own stop is inside it")
+  ## THE WHOLE ENVELOPE, out loud. The episode clock starts above the lobby
+  ## (server.nim), so `wallClockBudgetSeconds` covers the lobby AND the loop;
+  ## what can still be added after it is the turn already in flight when the
+  ## stop fires, the display hold, and the shutdown grace.
+  block:
+    let worst = config.wallClockBudgetSeconds +
+      (config.turnBudgetMs + 999) div 1000 +
+      (config.gameOverTurns * 250 + 999) div 1000 +
+      ShutdownGraceSeconds
+    c.check(worst <= 720,
+      "lobby + loop + the turn in flight + the hold + the grace fits 720 s (" &
+      $worst & " s)")
+    c.check(config.lobbyJoinTimeoutSeconds < config.wallClockBudgetSeconds,
+      "and the lobby cannot eat the whole budget on its own")
+    let source = readFile("src/snake/server.nim")
+    let clockAt = source.find("let started = getMonoTime()")
+    let lobbyAt = source.find("waitForLobby(config)")
+    c.check(clockAt > 0 and lobbyAt > 0, "both the clock and the lobby exist")
+    c.check(clockAt < lobbyAt,
+      "the episode clock starts ABOVE the lobby, so the budget covers it")
+    let holdAt = source.find("sleep(max(0, config.gameOverTurns) * 250)")
+    let writeAt = source.find("writeCogameUri(rt.resultsUri")
+    c.check(holdAt > 0 and writeAt > 0, "the hold and the write both exist")
+    c.check(holdAt < writeAt,
+      "and the display hold runs BEFORE the artifacts are written")
   ## The per-turn budget is a cap on the CALLS -- attempt 1 plus the single
   ## retry plus slack -- so it must be able to hold both attempts.
   c.check(config.turnBudgetMs >= config.attempt1Ms + config.retryMs,

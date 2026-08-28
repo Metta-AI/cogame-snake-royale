@@ -56,9 +56,11 @@ const
   ClientRoot = "client"
 
 const
-  ShutdownGraceSeconds = 20
+  ShutdownGraceSeconds* = 20
     ## `/healthz` and `/global` keep answering this long after the artifacts
     ## are written; the episode runner waits on process exit anyway.
+  StartupGraceMs* = 200
+    ## The listen socket is up before the lobby opens.
 
 proc contentTypeFor(path: string): string =
   let dot = path.rfind('.')
@@ -312,7 +314,17 @@ proc runEpisode*(host: string, port: int, config: GameConfig,
   httpServer = newServer(buildRouter().toHandler(), websocketHandler)
   createThread(serveThread, serveLoop, (host: host, port: port))
   echo "snake-royale listening on ", host, ":", port
-  sleep(200)
+  sleep(StartupGraceMs)
+
+  ## THE EPISODE CLOCK STARTS HERE, above the lobby -- the platform charges
+  ## from pod start, so `wallClockBudgetSeconds` has to cover the lobby too.
+  ## Started below `waitForLobby` it measured the loop alone, and the worst
+  ## case became lobbyJoinTimeoutSeconds (90) + the whole 640 s budget + the
+  ## turn in flight + the shutdown grace = ~720 s, i.e. exactly the 60 % of
+  ## episodeTimeoutSeconds the design note plays inside, with nothing spare.
+  ## Covering the lobby puts the worst case at ~672 s
+  ## (tests/test_snake_llm.nim does the arithmetic).
+  let started = getMonoTime()
 
   waitForLobby(config)
 
@@ -365,7 +377,6 @@ proc runEpisode*(host: string, port: int, config: GameConfig,
     shared.playing = true
   broadcastLive()
 
-  let started = getMonoTime()
   var
     endRule = erFullTime
     reason = rsComplete
@@ -458,6 +469,12 @@ proc runEpisode*(host: string, port: int, config: GameConfig,
     shared.finished = true
   broadcastLive()
 
+  # The display hold, THEN the artifacts (design note §End conditions:
+  # `complete` "settles after the gameOverTurns display hold, then writes
+  # artifacts"). Both are bounded and the whole post-settle tail is
+  # gameOverTurns * 250 ms + the write + ShutdownGraceSeconds.
+  sleep(max(0, config.gameOverTurns) * 250)
+
   # Artifacts.
   writeCogameUri(rt.resultsUri, "COGAME_RESULTS_URI",
     episode.snakeResultsJson())
@@ -477,9 +494,8 @@ proc runEpisode*(host: string, port: int, config: GameConfig,
     episode.turnsPlayed, " turns"
   sendFinal()
 
-  # The display hold, then a bounded shutdown grace in which `/healthz` and
-  # `/global` keep answering (the lantern 0.1.3 scar).
-  sleep(max(0, config.gameOverTurns) * 250)
+  # A bounded shutdown grace in which `/healthz` and `/global` keep answering
+  # (the lantern 0.1.3 scar).
   let graceUntil = getMonoTime() + initDuration(seconds = ShutdownGraceSeconds)
   while getMonoTime() < graceUntil:
     sleep(250)
