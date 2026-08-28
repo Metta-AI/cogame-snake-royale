@@ -250,7 +250,7 @@ block:
 block:
   var state = blankState(7, 7, healthStart = 1)
   state.put(0, @[cell(3, 3), cell(3, 4)], dUp, health = 1)   ## starves
-  state.put(1, @[cell(2, 2), cell(1, 2)], dRight)
+  state.put(1, @[cell(2, 2), cell(1, 2)], dRight, health = 30)
   var dirs: array[Seats, Dir]
   dirs[0] = dUp                                 ## dies of hunger at [3,2]
   dirs[1] = dRight                              ## walks into [3,2]

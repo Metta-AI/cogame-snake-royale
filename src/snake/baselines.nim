@@ -33,9 +33,20 @@ const
   HungryFoodBonus* = 300
   DistanceCap* = 99
 
-  CoilTunables* = Tunables(spaceWeight: 1000, spaceCap: 2,
+  ## THE SWEPT PICK, not a guess. `tools/tune_baselines.nim --sweep` plays a
+  ## fixed 24-episode ladder over a bounded matrix and prints each candidate's
+  ## margin; these are the numbers that won it, recorded in
+  ## `tools/ci/baseline_tuning.json` and asserted by
+  ## `tests/test_snake_control.nim`.
+  ##
+  ## `spaceCap` is measured in multiples of the snake's own length and is
+  ## bounded above by the BFS cap (`4 * length`): a larger value cannot
+  ## discriminate, and a smaller one saturates so early that every legal
+  ## direction ties and the snake just goes straight into a wall -- which is
+  ## exactly how the first guessed pick lost the ladder 1.21 to 0.
+  CoilTunables* = Tunables(spaceWeight: 100, spaceCap: 4,
     headRiskPenalty: 900, killBonus: 120, foodWeight: 8, hungerThreshold: 12)
-  ForagerTunables* = Tunables(spaceWeight: 400, spaceCap: 1,
+  ForagerTunables* = Tunables(spaceWeight: 40, spaceCap: 1,
     headRiskPenalty: 500, killBonus: 60, foodWeight: 40,
     hungerThreshold: 999)
 
@@ -93,12 +104,11 @@ proc scoreDir*(state: GameState, slot: int, d: Dir,
   if d == snake.lastDir:
     result = result + StraightBonus
 
-proc baselineDir*(state: GameState, slot: int, kind: Baseline): Dir =
+proc baselineDirWith*(state: GameState, slot: int, tuning: Tunables): Dir =
   ## The highest-scoring direction, ties broken by the fixed wire order
   ## up, right, down, left. If EVERY direction scores minus-infinity the snake
   ## returns `last_dir` and dies -- which is the correct outcome for a
   ## sealed-in snake, and is never an unactuated seat.
-  let tuning = tunablesFor(kind)
   var
     best = NegInfinity
     chosen = state.snakes[slot].lastDir
@@ -113,14 +123,21 @@ proc baselineDir*(state: GameState, slot: int, kind: Baseline): Dir =
       found = true
   chosen
 
-proc scriptedOrder*(state: GameState, slot: int, kind: Baseline): SnakeOrder =
+proc baselineDir*(state: GameState, slot: int, kind: Baseline): Dir =
+  baselineDirWith(state, slot, tunablesFor(kind))
+
+proc scriptedOrderWith*(state: GameState, slot: int,
+                        tuning: Tunables): SnakeOrder =
   ## The scripted policy's whole reply. Neither baseline ever emits `say` or
   ## `notes` -- which is why the viewer's text chrome needs the renderer
   ## fixture (`tools/ci/renderer_fixture.html`): a CI replay contains no LLM
   ## text at all.
-  result.dir = baselineDir(state, slot, kind)
+  result.dir = baselineDirWith(state, slot, tuning)
   result.hasAlt = false
   result.say = ""
   result.notes = ""
   result.source = dsScripted
   result.fromReply = true
+
+proc scriptedOrder*(state: GameState, slot: int, kind: Baseline): SnakeOrder =
+  scriptedOrderWith(state, slot, tunablesFor(kind))

@@ -27,8 +27,15 @@ proc stripComments(text: string): string =
       inc i
   kept
 
-let page = stripComments(readFile("client/replay_broadcast.html"))
-let core = stripComments(readFile("client/broadcast_core.js"))
+proc scannable(text: string): string =
+  ## `#killfeed` is one of the element ids the design note lists as KEPT, so
+  ## the inherited id and the chrome alias that reads it are not paintbot
+  ## VOCABULARY -- they are the match feed's own name. Everything else in the
+  ## forbidden list is a string a spectator can read.
+  stripComments(text).replace("killfeed", "matchfeed")
+
+let page = scannable(readFile("client/replay_broadcast.html"))
+let core = scannable(readFile("client/broadcast_core.js"))
 
 const Forbidden = ["Lives", "LIVES", "Clstr", "Cap<", "flag", "heart",
                    "paint", "hopper", "hill", "POV", "spray", "grenade",

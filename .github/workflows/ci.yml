@@ -101,6 +101,16 @@ jobs:
           cat nim.cfg
           echo "::endgroup::"
 
+      - name: Sweep and verify the scripted-baseline tuning
+        # The tunables are SWEPT, NOT GUESSED. --sweep prints the whole matrix
+        # over the fixed 24-episode ladder (that record is what pins the
+        # shipped pick); --check fails if the shipped constants have drifted
+        # from tools/ci/baseline_tuning.json.
+        run: |
+          set -euo pipefail
+          nim r --hints:off -d:release --path:src tools/tune_baselines.nim \
+            --sweep --check
+
       - name: Run tests
         # Every tests/*.nim runs twice: debug (range/overflow checks, stack
         # traces) and -d:release (release-only compile errors and codegen bugs

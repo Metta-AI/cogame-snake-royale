@@ -17,7 +17,7 @@ const
   SeedStride = 977
   OutPath = "tools/ci/baseline_tuning.json"
 
-proc ladderMargin(coil, forager: Tunables): float =
+proc ladderMarginWith(coil, forager: Tunables): float =
   var
     coilTotal = 0
     foragerTotal = 0
@@ -26,8 +26,8 @@ proc ladderMargin(coil, forager: Tunables): float =
     config.seed = seed * SeedStride
     config.maxTurns = 50
     config.turnSpacingMs = 0
-    let played = runScriptedEpisode(config,
-      [blCoil, blForager, blCoil, blForager])
+    let played = runScriptedEpisodeWith(config,
+      [blCoil, blForager, blCoil, blForager], coil, forager)
     let permille = played.episode.scorePermille()
     coilTotal = coilTotal + permille[0] + permille[2]
     foragerTotal = foragerTotal + permille[1] + permille[3]
@@ -38,9 +38,26 @@ proc toJson(t: Tunables): JsonNode =
      "headRiskPenalty": t.headRiskPenalty, "killBonus": t.killBonus,
      "foodWeight": t.foodWeight, "hungerThreshold": t.hungerThreshold}
 
+proc sweep() =
+  ## The bounded matrix. `spaceCap` is measured in multiples of the snake's
+  ## own length and cannot usefully exceed the BFS cap of four; `spaceWeight`
+  ## sets how many free cells one head-on risk is worth.
+  echo "coil sweep (margin = coil mean score - forager mean score, per seat)"
+  for spaceWeight in [40, 100, 250, 1000]:
+    for spaceCap in [1, 2, 4]:
+      var coil = CoilTunables
+      coil.spaceWeight = spaceWeight
+      coil.spaceCap = spaceCap
+      let margin = ladderMarginWith(coil, ForagerTunables)
+      echo "  spaceWeight=", spaceWeight, " spaceCap=", spaceCap,
+        " margin=", margin
+
 when isMainModule:
-  let check = "--check" in commandLineParams()
-  let margin = ladderMargin(CoilTunables, ForagerTunables)
+  let params = commandLineParams()
+  let check = "--check" in params
+  if "--sweep" in params:
+    sweep()
+  let margin = ladderMarginWith(CoilTunables, ForagerTunables)
   echo "ladder margin (coil - forager, mean score per seat): ", margin
   let document = %*{
     "note": "The swept pick. tools/tune_baselines.nim plays a bounded matrix " &
@@ -55,8 +72,17 @@ when isMainModule:
   }
   if check:
     let recorded = parseJson(readFile(OutPath))
-    if recorded{"baselines"} != document{"baselines"}:
-      quit("baseline tuning drifted from " & OutPath, 1)
+    for name in ["coil", "forager"]:
+      let want = recorded{"baselines"}{name}
+      let got = document{"baselines"}{name}
+      if want.isNil:
+        quit(OutPath & " has no recorded pick for " & name, 1)
+      for key in ["spaceWeight", "spaceCap", "headRiskPenalty", "killBonus",
+                  "foodWeight", "hungerThreshold"]:
+        if want{key}.getInt() != got{key}.getInt():
+          quit("baseline tuning drifted from " & OutPath & ": " & name & "." &
+            key & " is " & $got{key}.getInt() & ", recorded " &
+            $want{key}.getInt(), 1)
     echo "baseline tuning matches ", OutPath
   else:
     writeFile(OutPath, document.pretty() & "\n")

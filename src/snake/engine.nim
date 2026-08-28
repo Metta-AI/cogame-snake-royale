@@ -14,8 +14,9 @@ type
     replay*: Replay
     events*: seq[TurnEvent]
 
-proc runScriptedEpisode*(config: GameConfig,
-                         kinds: array[Seats, Baseline]): ScriptedEpisode =
+proc runScriptedEpisodeWith*(config: GameConfig,
+                             kinds: array[Seats, Baseline],
+                             coil, forager: Tunables): ScriptedEpisode =
   ## One episode, every seat scripted. Returns the settled episode, the replay
   ## the server would have written, and every event the turn loop emitted.
   var episode = newEpisode(config)
@@ -43,7 +44,8 @@ proc runScriptedEpisode*(config: GameConfig,
         bytes[slot] = DeadDirByte
         dirs[slot] = episode.state.snakes[slot].lastDir
         continue
-      let order = scriptedOrder(episode.state, slot, kinds[slot])
+      let tuning = if kinds[slot] == blCoil: coil else: forager
+      let order = scriptedOrderWith(episode.state, slot, tuning)
       dirs[slot] = order.dir
       bytes[slot] = uint8(ord(order.dir))
       replay.chats.add(boundedDirectiveRecord(order, episode.state.turn + 1,
@@ -66,6 +68,10 @@ proc runScriptedEpisode*(config: GameConfig,
     other: -1, text: $rsComplete))
   replay.chats.add(resultRecord(episode))
   ScriptedEpisode(episode: episode, replay: replay, events: events)
+
+proc runScriptedEpisode*(config: GameConfig,
+                         kinds: array[Seats, Baseline]): ScriptedEpisode =
+  runScriptedEpisodeWith(config, kinds, CoilTunables, ForagerTunables)
 
 proc allCoil*(): array[Seats, Baseline] =
   for slot in 0 ..< Seats:

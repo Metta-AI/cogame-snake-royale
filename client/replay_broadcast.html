@@ -1079,22 +1079,18 @@ body[data-embed] #board { top: 0; height: 100%; }
     sendPov: function (slot) { send('v:' + slot); },
     getState: function () { return lastState; }
   });
-  // Aliases so the per-view code below reads exactly as before.
-  var RED = C.RED, BLUE = C.BLUE, AMBER = C.AMBER, PAPER = C.PAPER;
-  var GREEN = C.GREEN, YELLOW = C.YELLOW;
-  var TEAM_ORDER = C.TEAM_ORDER, TEAM_COLOR = C.TEAM_COLOR;
-  var teamCol = C.teamCol, activeTeams = C.activeTeams, teamOf = C.teamOf;
-  var otherTeam = C.otherTeam, stripSeatSuffix = C.stripSeatSuffix;
-  var teamPolicies = C.teamPolicies, teamName = C.teamName, teamHeadline = C.teamHeadline;
-  var rosterName = C.rosterName, setName = C.setName, esc = C.esc, fmt = C.fmt;
-  var setHandicap = C.setHandicap;
-  var teamPerkGroups = C.teamPerkGroups, perkIconsHtml = C.perkIconsHtml;
-  var togglePov = C.togglePov, renderClock = C.renderClock, renderTransport = C.renderTransport;
+  // Aliases so the per-view code below reads exactly as before. The starter's
+  // TEAM machinery (RED/BLUE/GREEN/YELLOW, teamCol, activeTeams, teamOf,
+  // teamName, teamPolicies, teamHeadline, killMarkerTeam, captureTeam,
+  // setVerdict, togglePov, setHandicap, teamPerkGroups, perkIconsHtml) is
+  // dropped with the mechanics it drove: a four-way free-for-all has no sides.
+  // markBeat stays aliased on purpose -- the appended block's builder is
+  // deliberately named snakeBeat so it can never shadow it.
+  var esc = C.esc, fmt = C.fmt, setName = C.setName;
+  var renderClock = C.renderClock, renderTransport = C.renderTransport;
   var ingestLullSpans = C.ingestLullSpans, renderLullSpans = C.renderLullSpans;
-  var markBeat = C.markBeat, killMarkerTeam = C.killMarkerTeam, renderBeatMarkers = C.renderBeatMarkers;
-  var captureTeam = C.captureTeam, ingestBeats = C.ingestBeats, setVerdict = C.setVerdict;
-  var ingestLeadSeries = C.ingestLeadSeries, recordMomentum = C.recordMomentum;
-  var renderMomentum = C.renderMomentum;
+  var markBeat = C.markBeat, renderBeatMarkers = C.renderBeatMarkers;
+  var ingestLeadSeries = C.ingestLeadSeries, renderMomentum = C.renderMomentum;
   var getSpoilers = C.getSpoilers, setSpoilers = C.setSpoilers;
   // ---- delivery-mode asset base --------------------------------------------
   // This page is served from THREE places and a leading slash is only correct

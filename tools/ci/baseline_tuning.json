@@ -13,15 +13,15 @@
   },
   "baselines": {
     "coil": {
-      "spaceWeight": 1000,
-      "spaceCap": 2,
+      "spaceWeight": 100,
+      "spaceCap": 4,
       "headRiskPenalty": 900,
       "killBonus": 120,
       "foodWeight": 8,
       "hungerThreshold": 12
     },
     "forager": {
-      "spaceWeight": 400,
+      "spaceWeight": 40,
       "spaceCap": 1,
       "headRiskPenalty": 500,
       "killBonus": 60,
