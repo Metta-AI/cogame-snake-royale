@@ -4,7 +4,7 @@
 
 import std/[json, os, osproc, strutils, unicode]
 import snake/[board, rules, sim, sim_types, engine, baselines, replays,
-              records, replay_runtime, directives]
+              records, replay_runtime, directives, wire_constants]
 import helpers
 
 var c = newChecker("test_snake_replay")
@@ -137,6 +137,77 @@ block:
     $slow & ")")
   c.check(rt.turnAt(rt.playback.frame) >= 8,
     "33c: and the playhead is still on the turn axis the scrubber draws")
+
+# 33d -- the 0.5x chip is a real half-rate playback, not just a label.
+block:
+  ## The transport's slowest multiplier. `advance` walks an INTEGER frame axis
+  ## (the scrubber, `s:<tick>` and every beat button are 1:1 with it), so half
+  ## speed has to fall out of the sub-frame accumulator: the whole ratio is
+  ## kept in half frames and `halfSpeed` is the one un-doubled numerator.
+  let played = runScriptedEpisode(config("royale", 42, 40), certificationSeats())
+  var rt = loadReplay(encodeReplay(played.replay))
+  c.check(rt.snapshots.len - 1 >= 12, "33d: the fixture is long enough")
+  ## The duel's own doubling is a SECOND rate multiplier on the same axis, so
+  ## it is switched off here and re-armed deliberately at the end of the block.
+  rt.duelTurn = -1
+  c.check(not rt.playback.halfSpeed and rt.displaySpeed() == 1.0,
+    "33d: playback opens at 1x, not half")
+
+  rt.command("5")
+  c.check(rt.playback.halfSpeed and rt.displaySpeed() == 0.5,
+    "33d: '5' selects half speed, and the packet's sp says 0.5")
+  rt.seekTurn(2)
+  rt.playback.playing = true
+  let halfFrom = rt.playback.frame
+  for _ in 1 .. 8:
+    rt.advance()
+  c.check(rt.playback.frame - halfFrom == 4,
+    "33d: eight render frames at 0.5x advance FOUR (got " &
+    $(rt.playback.frame - halfFrom) & ")")
+
+  ## Every whole multiplier clears it, and lands on exactly the frame count it
+  ## landed on before the accumulator was re-scaled.
+  for (cmd, want) in [("1", 1), ("2", 2), ("3", 3), ("4", 4), ("8", 8),
+                      ("6", 16)]:
+    rt.command(cmd)
+    c.check(not rt.playback.halfSpeed and rt.playback.speed == want and
+      rt.displaySpeed() == float(want),
+      "33d: '" & cmd & "' is " & $want & "x and clears half speed")
+    rt.seekTurn(2)
+    let from2 = rt.playback.frame
+    for _ in 1 .. 4:
+      rt.advance()
+    c.check(rt.playback.frame - from2 == 4 * want,
+      "33d: four frames at " & $want & "x advance " & $(4 * want) & " (got " &
+      $(rt.playback.frame - from2) & ")")
+
+  ## Half speed COMPOSES with the duel's own doubling rather than fighting it:
+  ## inside the duel a turn already takes twice its frames, so 0.5x is a
+  ## quarter rate.
+  rt.command("5")
+  rt.duelTurn = 6
+  rt.seekTurn(8)
+  let duelFrom = rt.playback.frame
+  for _ in 1 .. 8:
+    rt.advance()
+  c.check(rt.playback.frame - duelFrom == 2,
+    "33d: eight frames at 0.5x inside the duel advance TWO (got " &
+    $(rt.playback.frame - duelFrom) & ")")
+
+  ## And the browser end of the same wire: the engine emits 0.5 in `speeds`,
+  ## the page builds the chip the shared chrome cannot, and Space still pauses.
+  let wire = WireConstantsJs
+  c.check("speeds:[0.5,1,2,3,4,8,16]" in wire,
+    "33d: the wire block emits 0.5 at the head of speeds (got " & wire & ")")
+  let page = readFile("client/replay_broadcast.html")
+  let chipClick =
+    "halfChip.addEventListener('click', function () { CTX.send('5'); });"
+  c.check(chipClick in page,
+    "33d: the page's 0.5x chip sends the engine's own command char")
+  c.check("halfChip.classList.toggle('on', s.sp === 0.5)" in page,
+    "33d: and lights itself from the frame packet's sp")
+  c.check("if (k === ' ') { ev.preventDefault(); togglePlay(); }" in page,
+    "33d: Space pauses on the shipped page, and does not scroll it")
 
 # 34 -- the replay is self-sufficient.
 block:

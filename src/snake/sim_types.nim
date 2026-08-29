@@ -47,7 +47,11 @@ const
   PlacementPermille*: array[Seats, int] = [1000, 333, -333, -1000]
     ## Places 1..4. The four scores always sum to exactly zero.
 
-  PlaybackSpeeds* = [1, 2, 3, 4, 8, 16]
+  PlaybackSpeeds* = [0.5, 1.0, 2.0, 3.0, 4.0, 8.0, 16.0]
+    ## MULTIPLIERS, not step counts: 0.5 is a real half-rate playback (a turn
+    ## takes twice its render frames), which is why this is a float array and
+    ## the wire block emits it as one. `Playback.speed` still carries the
+    ## whole-number steps; `Playback.halfSpeed` carries the 0.5.
   ProtocolName* = "snake-royale/v1"
   ReplayMagic* = "COWLDSNK"
   ReplayFormatVersion* = 1

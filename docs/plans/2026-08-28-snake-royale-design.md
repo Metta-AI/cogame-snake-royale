@@ -1126,9 +1126,14 @@ click. CSS exists for **every kind emitted and no others**: `.beat-marker.eat`, 
 div marker cannot appear.
 
 **Playback rate: `renderFramesPerTurn = 12` at `ReplayFps = 24`** — 0.5 s per turn, speed chips
-`[1, 2, 3, 4, 8, 16]` (the starter's `PlaybackSpeeds`, default **1×**). A 50-turn episode plays for
+`[0.5, 1, 2, 3, 4, 8, 16]` (`PlaybackSpeeds`, default **1×**). A 50-turn episode plays for
 **25 s**; the 40-turn certification replay for **20 s**, which is what lets `viewer_smoke.mjs --soak 10`
 observe real advancement instead of a legitimately-finished replay (the ecos 2026-08-23 scar).
+**0.5× is a real half-rate playback**, not a label: `Playback.halfSpeed` (command char `'5'`, the only
+free digit) comes out of `advance`'s sub-frame accumulator, whose ratio is kept in HALF frames so the
+frame axis stays integral and every whole multiplier lands on the frame count it always did.
+`chrome_common.js` is pinned byte-for-byte to the starter's and builds one chip per whole multiplier,
+so the game block prepends the 0.5× chip itself, keyed off the wire block's own `speeds` array.
 **Duel slow-mo:** from the pre-scan's `duel` turn (the turn `aliveCount` first reaches 2) the block
 doubles `renderFramesPerTurn` to 24, i.e. half speed, and shows `DUEL — half speed` in `#bannerlane`
 (the top band, never the transport band). The speed chips still override it.

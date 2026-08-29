@@ -10,11 +10,15 @@
 import std/strutils
 import roster, sim_types
 
-proc jsIntArray(values: openArray[int]): string =
+proc jsNumArray(values: openArray[float]): string =
+  ## Playback multipliers are floats now that 0.5x exists. Whole values are
+  ## emitted without a fractional part so `speeds` still reads [0.5,1,2,...]
+  ## and a chip's key compares equal to the frame packet's integral `sp`.
   result = "["
   for i, v in values:
     if i > 0: result.add ","
-    result.add $v
+    if v == float(int(v)): result.add $int(v)
+    else: result.add formatFloat(v, ffDecimal, 1)
   result.add "]"
 
 proc jsStrArray(values: openArray[string]): string =
@@ -29,7 +33,7 @@ const WireConstantsMarker* = "<!-- WIRE_CONSTANTS -->"
   ## any script that reads window.SNAKE_WIRE).
 
 const WireConstantsJs* =
-  "window.SNAKE_WIRE={speeds:" & jsIntArray(PlaybackSpeeds) &
+  "window.SNAKE_WIRE={speeds:" & jsNumArray(PlaybackSpeeds) &
   ",fps:" & $TargetFps &
   ",seats:" & $Seats &
   ",maxSayRunes:" & $MaxSayRunes &
