@@ -41,12 +41,17 @@ type
   Playback* = object
     playing*: bool
     speed*: int
+    halfSpeed*: bool
+      ## The 0.5x chip. A separate flag rather than a fractional `speed`
+      ## because every whole multiplier is still an integer FRAME STEP and
+      ## `advance` walks an integer frame axis; half speed is the one rate
+      ## that has to come out of the sub-frame accumulator instead.
     loop*: bool
     skipLulls*: bool
     fastForward*: bool
     frame*: int                 ## absolute render frame
     framesPerTurn*: int
-    accum*: int                 ## sub-frame remainder, for duel slow-mo
+    accum*: int                 ## sub-frame remainder, in HALF frames
 
   ReplayRuntime* = object
     replay*: Replay
@@ -284,6 +289,11 @@ proc inLull*(rt: ReplayRuntime, turn: int): bool =
       return true
   false
 
+proc displaySpeed*(rt: ReplayRuntime): float =
+  ## The multiplier the chrome's speed chips label themselves with, and the
+  ## one the frame packet publishes as `sp`.
+  if rt.playback.halfSpeed: 0.5 else: float(max(1, rt.playback.speed))
+
 proc advance*(rt: var ReplayRuntime) =
   ## One render frame of playback.
   if not rt.playback.playing:
@@ -300,10 +310,17 @@ proc advance*(rt: var ReplayRuntime) =
   ## AXIS stays uniform, so the scrubber, `s:<tick>` and every beat button stay
   ## 1:1 with the turn; only the rate the playhead walks it changes. Outside
   ## the duel `perTurn == framesPerTurn` and this is `frame += step` exactly.
+  ##
+  ## HALF SPEED rides the same accumulator: the whole ratio is kept in HALF
+  ## frames (numerator and denominator both doubled), so `halfSpeed` is one
+  ## un-doubled numerator and every whole multiplier still lands on exactly
+  ## the frame count it landed on before.
   let perTurn = max(1, rt.framesPerTurnAt(rt.turnAt(rt.playback.frame)))
-  rt.playback.accum = rt.playback.accum + step * rt.playback.framesPerTurn
-  let advanced = rt.playback.accum div perTurn
-  rt.playback.accum = rt.playback.accum mod perTurn
+  let halves = if rt.playback.halfSpeed: 1 else: 2
+  rt.playback.accum = rt.playback.accum +
+    step * rt.playback.framesPerTurn * halves
+  let advanced = rt.playback.accum div (perTurn * 2)
+  rt.playback.accum = rt.playback.accum mod (perTurn * 2)
   rt.playback.frame = rt.playback.frame + advanced
   if rt.playback.frame >= last:
     if rt.playback.loop:
@@ -340,12 +357,18 @@ proc command*(rt: var ReplayRuntime, text: string) =
   of 'e': rt.playback.frame = rt.totalFrames() - 1
   of 'r': rt.playback.loop = not rt.playback.loop
   of 'f': rt.playback.skipLulls = not rt.playback.skipLulls
-  of '1': rt.playback.speed = 1
-  of '2': rt.playback.speed = 2
-  of '3': rt.playback.speed = 3
-  of '4': rt.playback.speed = 4
-  of '8': rt.playback.speed = 8
-  of '6': rt.playback.speed = 16
+  # Speed chars are VALUES, not indices -- '6' is 16x, and '5' is the 0.5x
+  # chip (the only free digit; 5x is not a shipped multiplier). Selecting any
+  # whole multiplier clears half speed, so the two can never both be live.
+  of '5':
+    rt.playback.halfSpeed = true
+    rt.playback.speed = 1
+  of '1': rt.playback.halfSpeed = false; rt.playback.speed = 1
+  of '2': rt.playback.halfSpeed = false; rt.playback.speed = 2
+  of '3': rt.playback.halfSpeed = false; rt.playback.speed = 3
+  of '4': rt.playback.halfSpeed = false; rt.playback.speed = 4
+  of '8': rt.playback.halfSpeed = false; rt.playback.speed = 8
+  of '6': rt.playback.halfSpeed = false; rt.playback.speed = 16
   of 's':
     ## `s:<tick>` -- an absolute turn, the starter's wire word
     ## (coworld-ctf src/ctf/global.nim: `parseInt(item.text[2 .. ^1])`).

@@ -1933,8 +1933,36 @@ body[data-embed] #board { top: 0; height: 100%; }
     card.classList.add('on');
   }
 
+  // ---- the 0.5× speed chip -------------------------------------------------
+  // The engine ships 0.5× as a real playback multiplier (replay_runtime's
+  // `halfSpeed`, command char '5'), but the shared chrome builds one chip per
+  // WHOLE multiplier off its own inherited literal and chrome_common.js is
+  // pinned byte-for-byte to the starter's. So the chip is built HERE, keyed
+  // off the wire block's own `speeds` array — the engine stays the single
+  // source of truth for which multipliers exist — and PREPENDED so the row
+  // still reads slowest-first. Idempotent: both entry points below may fire.
+  var halfChip = null;
+  function buildHalfSpeedChip() {
+    if (halfChip || !CTX) return;
+    var host = CTX.$('speedchips');
+    if (!host) return;
+    var speeds = (window.SNAKE_WIRE && window.SNAKE_WIRE.speeds) ||
+      [0.5, 1, 2, 3, 4, 8, 16];
+    if (speeds.indexOf(0.5) < 0) return;
+    halfChip = document.createElement('button');
+    halfChip.className = 'chip';
+    halfChip.textContent = '0.5×';
+    halfChip.setAttribute('aria-label', '0.5x speed');
+    halfChip.addEventListener('click', function () { CTX.send('5'); });
+    host.insertBefore(halfChip, host.firstChild);
+  }
+
   function snakeFrame(s, ctx, jumped) {
     CTX = ctx;
+    buildHalfSpeedChip();
+    // The shared chrome lights its own chips from `sp === s.sp` and knows
+    // nothing about 0.5, so this one owns its lit state.
+    if (halfChip) halfChip.classList.toggle('on', s.sp === 0.5);
     if (jumped) seenFeed = {};
     renderPlates(s);
     renderClockLine(s);
@@ -1958,10 +1986,18 @@ body[data-embed] #board { top: 0; height: 100%; }
   function snakeEvent() { return false; }
 
   window.SnakeChrome = {
-    install: function (ctx) { CTX = ctx; },
+    install: function (ctx) { CTX = ctx; buildHalfSpeedChip(); },
     frame: snakeFrame,
     event: snakeEvent
   };
+
+  // This block is spliced BELOW the driver IIFE, so the driver's own
+  // `if (window.SnakeChrome) install(PB_CTX)` line has already gone by with
+  // SnakeChrome still undefined — PB_CTX is published on window for exactly
+  // this reason. Take it now so the speed chip is in the transport before the
+  // first frame instead of appearing a frame late.
+  CTX = window.SNAKE_PB_CTX || null;
+  buildHalfSpeedChip();
 })();
 </script>
 
