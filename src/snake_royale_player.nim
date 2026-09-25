@@ -1,12 +1,13 @@
-## The snake-royale player container: a policy is just a prompt.
+## The snake-royale player container: scripted, prompt, or external policy.
 ##
-## This process is DELIBERATELY thin. It connects to its seat, sends ONE chat
-## message carrying its registration, and then only receives. Every decision
-## happens inside the GAME server, because that is the only container the
-## platform injects the `anthropic_api_key` coworld secret into.
+## Prompt decisions run inside the game, where the platform supplies its LLM
+## secret. External policies receive the seat view and return a direction over
+## the same ordinary player socket.
 ##
 ##   PLAYER_PROMPT        a strategy in plain English -> this seat is an LLM seat
 ##   PLAYER_SCRIPTED      coil | forager               -> this seat is scripted
+##   PLAYER_NUMERIC_URL   a frozen Fabric choice endpoint
+##   PLAYER_JEV           1 to choose through System One
 ##   PLAYER_POLICY_LABEL  a free label for the replay's `register` record
 ##
 ## A seat that sets neither is `coil`. To field your own policy, reuse this
@@ -15,8 +16,10 @@
 ##   coworld upload-policy <snake-royale-image> --name my-snake \
 ##     --run /bin/snake-royale-player --secret-env PLAYER_PROMPT="<strategy>"
 
-import std/[json, options, os, strutils, unicode]
+import std/[json, options, os, random, strutils, times, unicode]
 import whisky
+import snake/numeric_policy
+import snake/jev_policy
 
 const
   ConnectAttempts = 240      ## 240 x 500 ms = 2 minutes of dialling.
@@ -31,7 +34,8 @@ proc truncateRunes(text: string, limit: int): string =
   if text.runeLen <= limit: return text
   text.runeSubStr(0, limit)
 
-proc registrationBlob(prompt, scripted, policy: string): string =
+proc registrationBlob(prompt, scripted, policy: string,
+                      external: bool): string =
   ## The one registration message. `scripted` is JSON null when the seat is an
   ## LLM seat, so the server can tell "no baseline named" from "coil named
   ## explicitly".
@@ -44,6 +48,8 @@ proc registrationBlob(prompt, scripted, policy: string): string =
     node["scripted"] = %scripted
   else:
     node["scripted"] = newJNull()
+  if external:
+    node["mode"] = %"external"
   $node
 
 when isMainModule:
@@ -53,16 +59,26 @@ when isMainModule:
   let
     prompt = getEnv("PLAYER_PROMPT").strip()
     scripted = getEnv("PLAYER_SCRIPTED").strip()
+    numeric = getEnv("PLAYER_NUMERIC_URL").strip().len > 0
+    jev = getEnv("PLAYER_JEV") == "1"
+    external = numeric or jev
     label = block:
       let explicit = getEnv("PLAYER_POLICY_LABEL").strip()
       if explicit.len > 0: explicit
+      elif jev: "jev"
+      elif numeric: "numeric"
       elif prompt.len > 0: "prompt"
       elif scripted.len > 0: scripted
       else: "coil"
   echo "snake-royale player: kind=",
-    (if prompt.len > 0: "llm" else: "scripted"),
+    (if external: "external" elif prompt.len > 0: "llm" else: "scripted"),
     " baseline=", (if scripted.len > 0: scripted else: "coil"),
     " label=", label
+  if external and (prompt.len > 0 or scripted.len > 0) or numeric and jev:
+    quit("Choose exactly one player policy mode", 1)
+  randomize()
+  let session = "snake:" & $getCurrentProcessId() & ":" &
+    $getTime().toUnix() & ":" & $rand(high(int))
 
   proc dial(attempts: int): WebSocket =
     ## Bounded dialling. The episode runner starts the players at the same
@@ -95,7 +111,7 @@ when isMainModule:
   while not done:
     var sessionFrames = 0
     try:
-      socket.send(registrationBlob(prompt, scripted, label), BinaryMessage)
+      socket.send(registrationBlob(prompt, scripted, label, external), BinaryMessage)
       var resends = 0
       while true:
         let received = socket.receiveMessage()
@@ -108,7 +124,14 @@ when isMainModule:
         if resends < RegistrationResends and
             sessionFrames mod ResendEveryFrames == 1:
           inc resends
-          socket.send(registrationBlob(prompt, scripted, label), BinaryMessage)
+          socket.send(registrationBlob(prompt, scripted, label, external), BinaryMessage)
+        if external and received.get().kind == TextMessage:
+          let request = parseJson(received.get().data)
+          if request{"type"}.getStr() == "decision":
+            let choice = if jev: chooseJevDirection(request)
+              else: chooseNumericDirection(request, session)
+            socket.send($( %*{"type": "order", "turn": request["turn"],
+              "choice": choice}), TextMessage)
     except CatchableError as error:
       echo "snake-royale player: socket closed (", error.msg, ")"
     if done:

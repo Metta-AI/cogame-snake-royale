@@ -30,11 +30,16 @@ type
     prompt: string
     scripted: string
     policy: string
+    external: bool
     seen: bool
 
   SharedState = object
     episode: Episode
     registrations: array[Seats, Registration]
+    pendingTurn: array[Seats, int]
+    choiceTurn: array[Seats, int]
+    choices: array[Seats, int]
+    choiceAt: array[Seats, MonoTime]
     joined: array[Seats, bool]
     playing: bool
     finished: bool
@@ -204,7 +209,20 @@ proc applyRegistration(slot: int, payload: string) =
     node = parseJson(payload)
   except CatchableError:
     return
-  if node.kind != JObject or node{"type"}.getStr() != "register":
+  if node.kind != JObject:
+    return
+  if node{"type"}.getStr() == "order":
+    if node{"turn"}.kind != JInt or node{"choice"}.kind != JInt:
+      return
+    let turn = node["turn"].getInt()
+    let choice = node["choice"].getInt()
+    withLock stateLock:
+      if turn == shared.pendingTurn[slot] and shared.registrations[slot].external:
+        shared.choiceTurn[slot] = turn
+        shared.choices[slot] = choice
+        shared.choiceAt[slot] = getMonoTime()
+    return
+  if node{"type"}.getStr() != "register":
     return
   withLock stateLock:
     shared.registrations[slot].prompt =
@@ -212,6 +230,7 @@ proc applyRegistration(slot: int, payload: string) =
     shared.registrations[slot].scripted = node{"scripted"}.getStr()
     shared.registrations[slot].policy =
       node{"policy"}.getStr().truncateRunes(MaxPolicyLabelRunes)
+    shared.registrations[slot].external = node{"mode"}.getStr() == "external"
     shared.registrations[slot].seen = true
     shared.joined[slot] = true
 
@@ -365,10 +384,12 @@ proc runEpisode*(host: string, port: int, config: GameConfig,
     else:
       engine.seats[slot].registered = true
       engine.seats[slot].prompt = reg.prompt
-      engine.seats[slot].isLlm = reg.prompt.len > 0
+      engine.seats[slot].isExternal = reg.external
+      engine.seats[slot].isLlm = reg.prompt.len > 0 and not reg.external
       engine.seats[slot].baseline = parseBaseline(reg.scripted)
       engine.seats[slot].label =
         if reg.policy.len > 0: reg.policy
+        elif reg.external: "external"
         elif reg.prompt.len > 0: "prompt"
         else: $engine.seats[slot].baseline
     episode.seats[slot].policyKind = engine.policyKind(slot)
@@ -409,7 +430,43 @@ proc runEpisode*(host: string, port: int, config: GameConfig,
         endRule = erFullTime
         break
 
-      let records = engine.turn(episode, elapsed)
+      let externalTurn = episode.state.turn + 1
+      let externalStart = getMonoTime()
+      let externalDeadline = externalStart +
+        initDuration(milliseconds = config.turnBudgetMs)
+      withLock stateLock:
+        for slot in 0 ..< Seats:
+          if engine.seats[slot].isExternal and episode.state.snakes[slot].alive:
+            shared.pendingTurn[slot] = externalTurn
+            shared.choiceTurn[slot] = 0
+      withLock socketLock:
+        for entry in playerSockets:
+          let slot = entry.slot
+          if engine.seats[slot].isExternal and episode.state.snakes[slot].alive:
+            entry.ws.send($( %*{"type": "decision", "turn": externalTurn,
+              "seat": slot, "deadline_ms": config.turnBudgetMs,
+              "observation": parseJson(episode.seatViewJson(slot))}))
+      var records = engine.turn(episode, elapsed)
+      var choices: array[Seats, int]
+      for slot in 0 ..< Seats: choices[slot] = -1
+      while true:
+        var pending = false
+        withLock stateLock:
+          for slot in 0 ..< Seats:
+            if engine.seats[slot].isExternal and
+                episode.state.snakes[slot].alive:
+              if shared.choiceTurn[slot] == externalTurn and
+                  shared.choiceAt[slot] <= externalDeadline:
+                choices[slot] = shared.choices[slot]
+              else:
+                pending = true
+        if not pending or getMonoTime() >= externalDeadline: break
+        sleep(10)
+      for slot in 0 ..< Seats:
+        if engine.seats[slot].isExternal and episode.state.snakes[slot].alive:
+          let record = engine.installExternalChoice(episode, slot,
+            choices[slot])
+          if record.len > 0: records.add(record)
       for record in records:
         replay.chats.add(record)
       ## A fallback is a fact about the transport, not about the board, so the
