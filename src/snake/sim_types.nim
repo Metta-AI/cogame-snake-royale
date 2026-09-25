@@ -10,7 +10,7 @@
 import std/strutils
 
 const
-  GameVersion* = "1"    ## the initial snake-royale rules
+  GameVersion* = "2"    ## external player orders and mixed-policy results
     ## Bumped whenever the recorded replay stream changes meaning. Every
     ## committed fixture carries it and `tests/test_snake_replay.nim` sweeps
     ## for a stale one. The HEADLINE on the declaration line is what

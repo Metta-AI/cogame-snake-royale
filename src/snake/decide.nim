@@ -31,6 +31,7 @@ type
     ## What one seat registered as. A seat that registers with neither field
     ## -- or never registers at all -- is `coil`.
     isLlm*: bool
+    isExternal*: bool
     prompt*: string
     baseline*: Baseline
     label*: string
@@ -59,7 +60,9 @@ proc initDecisionEngine*(config: GameConfig): DecisionEngine =
     result.seats[slot].label = "coil"
 
 proc policyKind*(engine: DecisionEngine, slot: int): string =
-  if engine.seats[slot].isLlm: "llm" else: "scripted"
+  if engine.seats[slot].isExternal: "external"
+  elif engine.seats[slot].isLlm: "llm"
+  else: "scripted"
 
 # ---------------------------------------------------------------------------
 #  The per-seat observation
@@ -222,6 +225,8 @@ proc turn*(engine: var DecisionEngine, episode: var Episode,
     if not episode.state.snakes[slot].alive:
       engine.haveOrder[slot] = false
       continue                        ## dead seats are never queried again
+    if engine.seats[slot].isExternal:
+      continue
     if engine.seats[slot].isLlm and not engine.llmOff and
         not engine.client.disabled:
       open.add(slot)
@@ -354,3 +359,27 @@ proc turn*(engine: var DecisionEngine, episode: var Episode,
     ## "falling back" is the phrase phase 60 greps the GAME log for.
     echo "snake-royale llm: seat ", slot, " falling back to coil (", cause,
       ") on turn ", turnIndex
+
+proc installExternalChoice*(engine: var DecisionEngine,
+                            episode: var Episode, slot, choice: int): string =
+  var legal = episode.legalMask(slot)
+  var anyLegal = false
+  for allowed in legal:
+    if allowed: anyLegal = true
+  if not anyLegal:
+    for allowed in legal.mitems: allowed = true
+  if choice in 0 ..< DirOrder.len and legal[choice]:
+    var order = parseSnakeOrder(%*{"dir": choice},
+      episode.state.snakes[slot].lastDir, legal)
+    order.source = dsExternal
+    engine.orders[slot] = order
+    engine.haveOrder[slot] = true
+    return ""
+  engine.orders[slot] = fallbackOrder(episode.state, slot)
+  engine.haveOrder[slot] = true
+  inc episode.seats[slot].fallbackTurns
+  let cause = if choice < 0: "timeout" else: "parse_error"
+  engine.events.add(TurnEvent(kind: ekFallback, turn: episode.state.turn + 1,
+    slot: slot, other: -1, at: episode.state.snakes[slot].head(), text: cause))
+  fallbackRecord(episode.state.turn + 1, slot, 1, cause,
+    "external player did not return a legal direction")

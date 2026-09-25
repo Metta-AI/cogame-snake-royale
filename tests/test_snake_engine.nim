@@ -2,8 +2,8 @@
 ## variant, the no-stall guarantee and the budget guard.
 
 import std/[json, os, sets, strutils]
-import snake/[board, rules, sim, sim_types, engine, replays, records, events,
-              decide]
+import snake/[board, rules, sim, sim_types, engine, replays, records, events, directives,
+              decide, numeric_bridge]
 import helpers
 
 var c = newChecker("test_snake_engine")
@@ -233,5 +233,39 @@ block:
   c.check(episode.reason == rsComplete,
     "32: the episode finishes complete, not deadline")
   c.check(episode.endRule == erFullTime, "32: on a natural end rule")
+
+# 33 -- a numeric player uses the same seat view and order parser as the game.
+block:
+  var config = defaultGameConfig()
+  config.seed = 42
+  var episode = newEpisode(config)
+  let view = parseJson(episode.seatViewJson(0))
+  let encoded = values(view)
+  let actions = candidates(view)
+  c.check(encoded.len == 6535, "33: numeric observation has fixed width")
+  c.check(actions.len == 4, "33: direction catalog matches the game")
+  var choice = -1
+  for index in 0 ..< actions.len:
+    if actions[index].kind != JNull:
+      choice = index
+      break
+  c.check(choice >= 0, "33: at least one direction is available")
+  var decision = initDecisionEngine(config)
+  decision.seats[0].isExternal = true
+  discard decision.turn(episode, 0)
+  c.check(not decision.haveOrder[0],
+    "33: game waits for the ordinary player socket")
+  c.check(decision.installExternalChoice(episode, 0, choice).len == 0,
+    "33: numeric choice is accepted")
+  c.check(decision.orders[0].source == dsExternal and
+    ord(decision.orders[0].dir) == choice,
+    "33: accepted choice is recorded as an external directive")
+  c.check(decision.installExternalChoice(episode, 0, -1).len > 0 and
+    episode.seats[0].fallbackTurns == 1,
+    "33: missing external response is recorded as fallback")
+  episode.seats[0].policyKind = "external"
+  episode.settle(rsComplete, erFullTime)
+  c.check(episode.crossPlay,
+    "33: external and scripted seats count as cross-play")
 
 c.report()

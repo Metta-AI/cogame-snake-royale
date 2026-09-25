@@ -255,8 +255,11 @@ proc settle*(episode: var Episode, reason: EndReason, endRule: EndRule,
   if detail.len > 0:
     episode.stopDetail = detail
   episode.over = true
-  var kinds: array[2, bool]
+  var kinds: array[3, bool]
   for slot in 0 ..< Seats:
-    if episode.seats[slot].policyKind == "llm": kinds[0] = true
-    else: kinds[1] = true
-  episode.crossPlay = kinds[0] and kinds[1]
+    case episode.seats[slot].policyKind
+    of "llm": kinds[0] = true
+    of "external": kinds[1] = true
+    else: kinds[2] = true
+  episode.crossPlay = (if kinds[0]: 1 else: 0) +
+    (if kinds[1]: 1 else: 0) + (if kinds[2]: 1 else: 0) > 1

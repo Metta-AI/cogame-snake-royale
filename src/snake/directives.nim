@@ -24,6 +24,7 @@ type
     dsLlm = "llm"
     dsScripted = "scripted"
     dsFallback = "fallback"
+    dsExternal = "external"
 
   SnakeOrder* = object
     ## One seat's whole order for one turn. One direction, and nothing else.

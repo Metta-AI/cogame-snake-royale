@@ -14,8 +14,8 @@ route usually helps a third snake more than it helps you. There is a public one-
 channel, so a snake can announce which lane it is taking — and everyone, including the snake
 it is about to seal in, reads it.
 
-**A policy is just a prompt.** Both champions are `PLAYER_PROMPT` policies; the two fillers
-are scripted baselines; all four run the same image, switched by environment.
+The current champions use `PLAYER_PROMPT`; the two fillers use scripted baselines.
+The player image also accepts numeric Fabric choices or Jev choices through the same seat socket.
 
 ## Rule modules
 
@@ -48,6 +48,32 @@ and only eat when your health is under 12"
 
 `PLAYER_SCRIPTED=coil` or `PLAYER_SCRIPTED=forager` seats one of the two shipped baselines
 instead. A seat that sets neither is `coil`.
+
+## Training and serving a policy
+
+Build the headless bridge and probe its fixed numeric codec:
+
+```bash
+nim c -d:release --path:src -o:snake-numeric-bridge src/snake/numeric_bridge.nim
+uv run ./tools/run.py recipes.external.coworld.train --dry-run \
+  'command=["/absolute/path/snake-numeric-bridge","royale","0"]' \
+  players=4 seat=0 total_timesteps=1024
+```
+
+Run the Metta command from a Metta checkout, with the bridge path replaced by its absolute path.
+The bridge uses the game's own seat view and turn resolver. It encodes 6,535 values and four directions
+for `royale`, `geese`, and `tron`, with the other three seats playing `coil`.
+The bridge seat argument and recipe `seat` must agree. Native training needs a CUDA host and exports
+a frozen Fabric policy bundle. This local source has been probed and played through complete seeded
+episodes; no trained Snake Royale checkpoint has been produced yet.
+
+Start `metta-choice-serve` with that bundle. Set
+`PLAYER_NUMERIC_URL=http://<policy-host>:<port>/choice` on the Snake Royale player image.
+The player sends the seat-private values and legal mask to the service, then sends its chosen
+direction over the normal `/player` socket. `PLAYER_NUMERIC_KEY` supplies an optional bearer key.
+Set `PLAYER_JEV=1` for Jev instead; its model transport uses the player's Bedrock sidecar,
+`METTA_CAPTURE_URL`, or `TYPESAFE_BASE_URL`. It chooses among the same legal directions.
+Neither mode requires a game-side model branch.
 
 ## Building
 

@@ -17,6 +17,15 @@ the seat**. `/global` is the spectator stream; `/healthz`, `/client/player` and
 `/client/global` answer the certifier's browser probes and keep answering for a bounded
 shutdown grace after the artifacts are written.
 
+An external player registers with `{"type":"register","mode":"external",...}`. On each live
+turn, the game sends that seat `{"type":"decision","turn":N,"seat":S,
+"deadline_ms":M,"observation":{...}}`. The player replies on the same socket with
+`{"type":"order","turn":N,"choice":0..3}`. Directions use `up, right, down, left`
+order. A stale, late, missing, or unsafe choice falls back to `coil` and is recorded.
+The player can choose locally, call a numeric Fabric policy, or call Jev; the game sees the
+same order message in every case. Numeric serving starts a fresh session per player episode.
+`results.crossPlay` is true when at least two of `scripted`, `llm`, and `external` are seated.
+
 ## Per-seat observation
 
 Perfect information: the whole board is in every observation, in board cells, integers only.

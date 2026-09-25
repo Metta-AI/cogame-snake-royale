@@ -1,8 +1,9 @@
-# Build Docker. ONE image, TWO entrypoints: /bin/snake-royale (the game server,
+# Build Docker. ONE image, THREE entrypoints: /bin/snake-royale (the game server,
 # which also makes every LLM call, because the game pod is the only container
 # the platform injects the anthropic_api_key coworld secret into) and
-# /bin/snake-royale-player (the thin snake seat registrar). The policy set is
-# env-switched inside this same image (PLAYER_PROMPT vs PLAYER_SCRIPTED), which
+# /bin/snake-royale-player (the snake seat policy), and
+# /bin/snake-numeric-bridge (the headless training adapter). The policy set is
+# env-switched inside this same image, which
 # is what keeps a champion and a scripted filler byte-identical apart from
 # their environment.
 FROM debian:bookworm-slim AS build
@@ -46,7 +47,12 @@ RUN nim c \
   $NimFlags \
   --nimcache:/tmp/snake-royale-player-nimcache \
   --out:snake-royale-player \
-  src/snake_royale_player.nim
+  src/snake_royale_player.nim && \
+  nim c \
+  $NimFlags \
+  --nimcache:/tmp/snake-numeric-bridge-nimcache \
+  --out:snake-numeric-bridge \
+  src/snake/numeric_bridge.nim
 
 # Run Docker.
 FROM debian:bookworm-slim
@@ -58,6 +64,7 @@ RUN apt-get update && \
 WORKDIR /workspace/snake
 COPY --from=build /workspace/snake/snake-royale /bin/snake-royale
 COPY --from=build /workspace/snake/snake-royale-player /bin/snake-royale-player
+COPY --from=build /workspace/snake/snake-numeric-bridge /bin/snake-numeric-bridge
 COPY --from=build /workspace/snake/*.json ./
 COPY --from=build /workspace/snake/data ./data
 COPY --from=build /workspace/snake/client ./client
