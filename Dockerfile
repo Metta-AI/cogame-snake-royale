@@ -1,11 +1,7 @@
-# Build Docker. ONE image, THREE entrypoints: /bin/snake-royale (the game server,
-# which also makes every LLM call, because the game pod is the only container
-# the platform injects the anthropic_api_key coworld secret into) and
-# /bin/snake-royale-player (the snake seat policy), and
-# /bin/snake-numeric-bridge (the headless training adapter). The policy set is
-# env-switched inside this same image, which
-# is what keeps a champion and a scripted filler byte-identical apart from
-# their environment.
+# Build Docker. ONE image, THREE entrypoints: /bin/snake-royale (the game
+# server), /bin/snake-royale-player (the seat policy, including numeric and
+# Jev choices), and /bin/snake-numeric-bridge (the headless training adapter).
+# Player policies are env-switched inside this same image.
 FROM debian:bookworm-slim AS build
 
 RUN apt-get update && \
