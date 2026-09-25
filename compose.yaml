@@ -2,11 +2,9 @@
 # compose service name by uppercasing and mapping "-" to "_"
 # ({{SNAKE_ROYALE_IMAGE}}). {{GAME_IMAGE}} is not a thing.
 #
-# ONE image, TWO entrypoints: /bin/snake-royale (the game server, which makes
-# every LLM call) and /bin/snake-royale-player (the thin seat registrar). The
-# whole policy set is env-switched inside this same image (PLAYER_PROMPT vs
-# PLAYER_SCRIPTED), which is what keeps a champion and a scripted filler
-# byte-identical apart from their environment.
+# ONE image, TWO entrypoints: /bin/snake-royale (the game server) and
+# /bin/snake-royale-player (the seat policy). Prompt, scripted, numeric, and
+# Jev players are selected by environment from this same image.
 services:
   snake-royale:
     image: coworld-snake-royale:latest

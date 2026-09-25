@@ -29,7 +29,7 @@ food, the trail never clears). See [`docs/MODULES.md`](docs/MODULES.md).
 |---|---|
 | `src/snake/` | the sim: `board.nim`, `rules.nim` (the resolver), `space.nim` (one bounded BFS), `upstream.nim` (the transcribed upstream facts), plus the server, the commander layer and the replay |
 | `src/snake_royale.nim` | the game server, `/bin/snake-royale` |
-| `src/snake_royale_player.nim` | the thin seat registrar, `/bin/snake-royale-player` |
+| `src/snake_royale_player.nim` | the seat player for scripted, prompt, numeric, and Jev policies, `/bin/snake-royale-player` |
 | `client/` | the broadcast chrome: `chrome_common.js` (byte-identical to the starter's), `broadcast_core.js` (the grid renderer) and `replay_broadcast.html` (the starter's page plus the appended SNAKE-ROYALE block) |
 | `replay-viewer/` | the wasm entry, the emscripten link flags and the static shell |
 | `data/` | the board art: nano-banana renders of the Softmax cog, one kit per colourway |
