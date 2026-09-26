@@ -3,8 +3,8 @@
 # ({{SNAKE_ROYALE_IMAGE}}). {{GAME_IMAGE}} is not a thing.
 #
 # ONE image, TWO entrypoints: /bin/snake-royale (the game server) and
-# /bin/snake-royale-player (the seat policy). Prompt, scripted, numeric, and
-# Jev players are selected by environment from this same image.
+# /bin/snake-royale-player (the seat policy). Prompt, scripted, and numeric
+# players are selected by environment from this same image.
 services:
   snake-royale:
     image: coworld-snake-royale:latest

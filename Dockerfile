@@ -1,6 +1,6 @@
 # Build Docker. ONE image, THREE entrypoints: /bin/snake-royale (the game
-# server), /bin/snake-royale-player (the seat policy, including numeric and
-# Jev choices), and /bin/snake-numeric-bridge (the headless training adapter).
+# server), /bin/snake-royale-player (the seat policy, including numeric
+# choices), and /bin/snake-numeric-bridge (the headless training adapter).
 # Player policies are env-switched inside this same image.
 FROM debian:bookworm-slim AS build
 
