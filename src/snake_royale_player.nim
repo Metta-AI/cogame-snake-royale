@@ -7,7 +7,6 @@
 ##   PLAYER_PROMPT        a strategy in plain English -> this seat is an LLM seat
 ##   PLAYER_SCRIPTED      coil | forager               -> this seat is scripted
 ##   PLAYER_NUMERIC_URL   a frozen Fabric choice endpoint
-##   PLAYER_JEV           1 to choose through System One
 ##   PLAYER_POLICY_LABEL  a free label for the replay's `register` record
 ##
 ## A seat that sets neither is `coil`. To field your own policy, reuse this
@@ -19,7 +18,6 @@
 import std/[json, options, os, random, strutils, times, unicode]
 import whisky
 import snake/numeric_policy
-import snake/jev_policy
 
 const
   ConnectAttempts = 240      ## 240 x 500 ms = 2 minutes of dialling.
@@ -60,12 +58,10 @@ when isMainModule:
     prompt = getEnv("PLAYER_PROMPT").strip()
     scripted = getEnv("PLAYER_SCRIPTED").strip()
     numeric = getEnv("PLAYER_NUMERIC_URL").strip().len > 0
-    jev = getEnv("PLAYER_JEV") == "1"
-    external = numeric or jev
+    external = numeric
     label = block:
       let explicit = getEnv("PLAYER_POLICY_LABEL").strip()
       if explicit.len > 0: explicit
-      elif jev: "jev"
       elif numeric: "numeric"
       elif prompt.len > 0: "prompt"
       elif scripted.len > 0: scripted
@@ -74,7 +70,7 @@ when isMainModule:
     (if external: "external" elif prompt.len > 0: "llm" else: "scripted"),
     " baseline=", (if scripted.len > 0: scripted else: "coil"),
     " label=", label
-  if external and (prompt.len > 0 or scripted.len > 0) or numeric and jev:
+  if external and (prompt.len > 0 or scripted.len > 0):
     quit("Choose exactly one player policy mode", 1)
   randomize()
   let session = "snake:" & $getCurrentProcessId() & ":" &
@@ -128,8 +124,7 @@ when isMainModule:
         if external and received.get().kind == TextMessage:
           let request = parseJson(received.get().data)
           if request{"type"}.getStr() == "decision":
-            let choice = if jev: chooseJevDirection(request)
-              else: chooseNumericDirection(request, session)
+            let choice = chooseNumericDirection(request, session)
             socket.send($( %*{"type": "order", "turn": request["turn"],
               "choice": choice}), TextMessage)
     except CatchableError as error:

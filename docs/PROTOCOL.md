@@ -22,7 +22,7 @@ turn, the game sends that seat `{"type":"decision","turn":N,"seat":S,
 "deadline_ms":M,"observation":{...}}`. The player replies on the same socket with
 `{"type":"order","turn":N,"choice":0..3}`. Directions use `up, right, down, left`
 order. A stale, late, missing, or unsafe choice falls back to `coil` and is recorded.
-The player can choose locally, call a numeric Fabric policy, or call Jev; the game sees the
+The player can choose locally or call a numeric Fabric policy; the game sees the
 same order message in every case. Numeric serving starts a fresh session per player episode.
 `results.crossPlay` is true when at least two of `scripted`, `llm`, and `external` are seated.
 

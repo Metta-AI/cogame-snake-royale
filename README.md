@@ -15,7 +15,7 @@ channel, so a snake can announce which lane it is taking — and everyone, inclu
 it is about to seal in, reads it.
 
 The current champions use `PLAYER_PROMPT`; the two fillers use scripted baselines.
-The player image also accepts numeric Fabric choices or Jev choices through the same seat socket.
+The player image also accepts numeric Fabric choices through the same seat socket.
 
 ## Rule modules
 
@@ -29,7 +29,7 @@ food, the trail never clears). See [`docs/MODULES.md`](docs/MODULES.md).
 |---|---|
 | `src/snake/` | the sim: `board.nim`, `rules.nim` (the resolver), `space.nim` (one bounded BFS), `upstream.nim` (the transcribed upstream facts), plus the server, the commander layer and the replay |
 | `src/snake_royale.nim` | the game server, `/bin/snake-royale` |
-| `src/snake_royale_player.nim` | the seat player for scripted, prompt, numeric, and Jev policies, `/bin/snake-royale-player` |
+| `src/snake_royale_player.nim` | the seat player for scripted, prompt, and numeric policies, `/bin/snake-royale-player` |
 | `client/` | the broadcast chrome: `chrome_common.js` (byte-identical to the starter's), `broadcast_core.js` (the grid renderer) and `replay_broadcast.html` (the starter's page plus the appended SNAKE-ROYALE block) |
 | `replay-viewer/` | the wasm entry, the emscripten link flags and the static shell |
 | `data/` | the board art: nano-banana renders of the Softmax cog, one kit per colourway |
@@ -71,9 +71,7 @@ Start `metta-choice-serve` with that bundle. Set
 `PLAYER_NUMERIC_URL=http://<policy-host>:<port>/choice` on the Snake Royale player image.
 The player sends the seat-private values and legal mask to the service, then sends its chosen
 direction over the normal `/player` socket. `PLAYER_NUMERIC_KEY` supplies an optional bearer key.
-Set `PLAYER_JEV=1` for Jev instead; its model transport uses the player's Bedrock sidecar,
-`METTA_CAPTURE_URL`, or `TYPESAFE_BASE_URL`. It chooses among the same legal directions.
-Neither mode requires a game-side model branch.
+Numeric serving requires no game-side model branch.
 
 ## Building
 
