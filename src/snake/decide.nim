@@ -292,7 +292,7 @@ proc turn*(engine: var DecisionEngine, episode: var Episode,
           "the JSON object described above, starting with '{', naming one " &
           "\"dir\".")
       let request = engine.client.requestFor(
-        SystemPrompt, userMessage(engine.seats[slot].prompt, user))
+        SystemPrompt, userMessage(engine.seats[slot].prompt, user), slot)
       batch.post(request.url, request.headers, request.body, $slot)
     let started = getMonoTime()
     # curly hands the deadline to CURLOPT_TIMEOUT, whose granularity is WHOLE
