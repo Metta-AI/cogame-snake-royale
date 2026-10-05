@@ -110,9 +110,8 @@ c.check(m{"game"}{"runnable"}{"type"}.getStr() == "game",
   "game.runnable.type is game")
 c.check(m{"game"}{"runnable"}{"image"}.getStr() == "{{SNAKE_ROYALE_IMAGE}}",
   "the image placeholder is derived from the compose service name")
-c.check(m{"game"}{"runnable"}{"env"}{"ANTHROPIC_API_KEY_URI"}.getStr() ==
-  "secret://coworld/snake-royale/anthropic_api_key",
-  "the secret namespace equals game.name")
+doAssert m{"game"}{"runnable"}{"env"}{"ANTHROPIC_API_KEY_URI"}.isNil,
+  "hosted LLM uses the platform sidecar without provider secrets"
 c.check(m{"game"}{"replay_viewer"}{"bundle"}.getStr() == "static-replay-viewer",
   "the replay viewer is the STATIC bundle, under game")
 c.check(m{"replay_viewer"}.isNil, "and not at the top level")
