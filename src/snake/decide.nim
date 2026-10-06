@@ -273,11 +273,13 @@ proc turn*(engine: var DecisionEngine, episode: var Episode,
   let turnStart = getMonoTime()
   # --- up to two PARALLEL batches ------------------------------------------
   var attempt = 0
+  var failureCauses: array[Seats, string]
   while open.len > 0 and attempt < 2:
     if engine.client.disabled:
       break
     if getMonoTime() - turnStart >= budget:
       for slot in open:
+        failureCauses[slot] = "timeout"
         result.add(fallbackRecord(turnIndex, slot, attempt + 1, "timeout",
           "per-turn budget exhausted before attempt " & $(attempt + 1)))
         noteFallback(slot, "timeout")
@@ -326,6 +328,7 @@ proc turn*(engine: var DecisionEngine, episode: var Episode,
                      "timeout" else: "transport_error")
         elif error.msg.startsWith("llm throttled"):
           cause = "throttled"
+        failureCauses[slot] = cause
         result.add(fallbackRecord(turnIndex, slot, attempt + 1, cause,
           error.msg))
         ## `will retry` -- NEVER `falling back`: only a genuine fallback may
@@ -352,7 +355,7 @@ proc turn*(engine: var DecisionEngine, episode: var Episode,
         "no_credentials"
       elif engine.llmOff: "budget_guard"
       elif engine.client.throttled: "throttled"
-      else: "parse_error"
+      else: failureCauses[slot]
     result.add(fallbackRecord(turnIndex, slot, 2, cause,
       "seat fell back to the coil direction"))
     noteFallback(slot, cause)
