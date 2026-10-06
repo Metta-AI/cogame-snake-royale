@@ -55,7 +55,7 @@ Build the headless bridge and probe its fixed numeric codec:
 
 ```bash
 nim c -d:release --path:src -o:snake-numeric-bridge src/snake/numeric_bridge.nim
-uv run ./tools/run.py recipes.external.coworld.train --dry-run \
+uv run ./tools/run.py train recipes.external.coworld \
   'command=["/absolute/path/snake-numeric-bridge","royale","0"]' \
   players=4 seat=0 total_timesteps=1024
 ```
@@ -63,8 +63,8 @@ uv run ./tools/run.py recipes.external.coworld.train --dry-run \
 Run the Metta command from a Metta checkout, with the bridge path replaced by its absolute path.
 The bridge uses the game's own seat view and turn resolver. It encodes 6,535 values and four directions
 for `royale`, `geese`, and `tron`, with the other three seats playing `coil`.
-The bridge seat argument and recipe `seat` must agree. Native training needs a CUDA host and exports
-a frozen Fabric policy bundle. This local source has been probed and played through complete seeded
+The bridge seat argument and recipe `seat` must agree. Reserve an NVIDIA GPU before running
+the bounded native optimizer, which exports a frozen Fabric policy bundle. This local source has been probed and played through complete seeded
 episodes; no trained Snake Royale checkpoint has been produced yet.
 
 Start `metta-choice-serve` with that bundle. Set
