@@ -64,7 +64,6 @@ type
     lengthSeries*: seq[array[Seats, int]]
     aliveSeries*: seq[int]
     says*: Table[int, string]   ## (turn * Seats + slot) -> text
-    fallbackTurns*: seq[int]
     fallbacks*: Table[int, string]
       ## (turn * Seats + slot) -> cause. A fallback is a fact about the
       ## TRANSPORT, so it cannot be re-derived from the board: it is recorded
@@ -114,6 +113,7 @@ proc beatLabel(kind: string, slot, value: int): string =
   else: kind
 
 proc ingestChats(rt: var ReplayRuntime) =
+  var orderSources = initTable[int, string]()
   for record in rt.replay.chats:
     if record.len == 0 or record[0] != '{':
       continue
@@ -128,13 +128,13 @@ proc ingestChats(rt: var ReplayRuntime) =
         turn = node{"turn"}.getInt(0)
         slot = node{"slot"}.getInt(-1)
         say = node{"say"}.getStr()
+      orderSources[turn * Seats + slot] = node["source"].getStr()
       if slot >= 0 and slot < Seats and say.len > 0:
         rt.says[turn * Seats + slot] = say
     of "fallback":
       let
         turn = node{"turn"}.getInt(0)
         slot = node{"slot"}.getInt(-1)
-      rt.fallbackTurns.add(turn)
       if slot >= 0 and slot < Seats:
         ## Attempt 1 and attempt 2 both write a record; one seat missing one
         ## turn's call is ONE event, and the last cause is the one that stuck.
@@ -150,6 +150,12 @@ proc ingestChats(rt: var ReplayRuntime) =
       rt.resultsJson = $node{"results"}
     else:
       discard
+
+  # Failed attempts can precede a successful retry. The executed order decides
+  # whether the turn actually used a fallback move.
+  for key, source in orderSources:
+    if source != "fallback":
+      rt.fallbacks.del(key)
 
 proc preScan*(rt: var ReplayRuntime) =
   ## Re-simulate the whole episode once, headlessly. Under a millisecond in
