@@ -4,7 +4,7 @@
 
 import std/[json, sets, strutils]
 import snake/[rules, events, sim, sim_types, baselines, engine, labels,
-              records, replays, replay_runtime]
+              records, replays, replay_runtime, broadcast]
 import helpers
 
 var c = newChecker("test_snake_events")
@@ -67,11 +67,29 @@ block:
   config.maxTurns = 40
   var played = runScriptedEpisode(config, certificationSeats())
   var replay = played.replay
+  for index, record in replay.chats:
+    var node = parseJson(record)
+    if node["k"].getStr() == "directive" and node["turn"].getInt() == 3:
+      if node["slot"].getInt() == 1:
+        node["source"] = %"fallback"
+      elif node["slot"].getInt() == 0:
+        node["source"] = %"llm"
+      replay.chats[index] = $node
+  # Seat 0 recovers on retry; seat 1 ultimately plays a fallback move.
+  replay.chats.add(fallbackRecord(3, 0, 1, "timeout", "first attempt timed out"))
   ## Two records for one seat-turn -- attempt 1 and the retry -- which is what
   ## the decision layer really writes; they are ONE missed call.
   replay.chats.add(fallbackRecord(3, 1, 1, "timeout", "attempt 1 timed out"))
   replay.chats.add(fallbackRecord(3, 1, 2, "timeout", "fell back to coil"))
   var rt = loadReplay(encodeReplay(replay))
+  c.check(not chromeJson(rt, 2)["roster"][1]["fallback"].getBool(),
+    "a future fallback does not mark an earlier turn")
+  c.check(not chromeJson(rt, 3)["roster"][0]["fallback"].getBool(),
+    "a recovered retry is not a fallback")
+  c.check(chromeJson(rt, 3)["roster"][1]["fallback"].getBool(),
+    "only the actual fallback seat is marked")
+  c.check(not chromeJson(rt, 4)["roster"][1]["fallback"].getBool(),
+    "the badge clears on the following turn")
   var emitted: seq[TurnEvent]
   for e in rt.events:
     if e.kind == ekFallback:

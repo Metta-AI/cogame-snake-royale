@@ -65,7 +65,7 @@ proc chromeJson*(rt: ReplayRuntime, turn: int): JsonNode =
       "trapped": snap.trapped[slot],
       "place": placeOf(rt, turn, slot),
       "kind": rt.policyKinds[slot],
-      "fallback": rt.fallbackTurns.len > 0 and rt.policyKinds[slot] == "llm"
+      "fallback": rt.fallbacks.hasKey(turn * Seats + slot)
     })
   var beats = newJArray()
   for b in rt.beats:
